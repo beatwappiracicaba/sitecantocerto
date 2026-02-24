@@ -20,10 +20,11 @@ export default function Header() {
       <div className="mx-auto max-w-6xl px-6 flex items-center justify-between">
         <button onClick={scrollTop} className="flex items-center group" aria-label="Canto Certo - Início">
           <img
-            src="/images/CANTOAMARELO.png"
+            src={scrolled ? '/images/CANTOBRANCO.png' : '/images/CANTOAMARELO.png'}
             alt="Canto Certo"
-            width={120}
-            className="group-hover:scale-105 transition-transform drop-shadow-[0_0_15px_rgba(255,255,0,0.3)]"
+            width={140}
+            height={48}
+            className={`block h-12 w-auto group-hover:scale-105 transition-transform ${scrolled ? 'drop-shadow-[0_0_12px_rgba(255,255,255,0.35)]' : 'drop-shadow-[0_0_12px_rgba(255,227,89,0.35)]'}`}
             loading="eager"
           />
         </button>
