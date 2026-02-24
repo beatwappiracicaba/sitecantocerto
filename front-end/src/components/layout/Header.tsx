@@ -1,6 +1,10 @@
 import { useCallback, useState, useEffect } from 'react'
 
-export default function Header() {
+type HeaderProps = {
+  onOpenLogin: () => void
+}
+
+export default function Header({ onOpenLogin }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -34,6 +38,12 @@ export default function Header() {
           <a href="#contato" className="shine inline-flex items-center rounded-full border border-white/10 bg-white/5 px-6 py-2 text-sm font-semibold hover:bg-white/10 hover:border-white/20 transition-all hover:scale-105">
             Reservar Mesa
           </a>
+          <button
+            onClick={onOpenLogin}
+            className="text-white/70 hover:text-neon-green transition-colors font-medium"
+          >
+            Entrar
+          </button>
         </nav>
       </div>
     </header>

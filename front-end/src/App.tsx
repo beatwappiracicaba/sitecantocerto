@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import Preloader from '@/components/shared/Preloader'
 import Header from '@/components/layout/Header'
 import Hero from '@/components/shared/Hero'
@@ -7,15 +8,65 @@ import Footer from '@/components/layout/Footer'
 import CursorEffect from '@/components/shared/CursorEffect'
 import SectionSnap from '@/components/shared/SectionSnap'
 
+type LoginPanelProps = {
+  open: boolean
+  onClose: () => void
+}
+
+function LoginPanel({ open, onClose }: LoginPanelProps) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-black/85 p-8 shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-white/60 hover:text-white transition-colors text-sm"
+        >
+          Fechar
+        </button>
+        <h2 className="text-2xl font-semibold mb-6 text-center">Entrar</h2>
+        <form className="space-y-4">
+          <div className="text-left">
+            <label className="block text-sm text-white/60 mb-1">E-mail</label>
+            <input
+              type="email"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+              placeholder="seu@email.com"
+            />
+          </div>
+          <div className="text-left">
+            <label className="block text-sm text-white/60 mb-1">Senha</label>
+            <input
+              type="password"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+              placeholder="••••••••"
+            />
+          </div>
+          <button
+            type="submit"
+            className="mt-4 w-full rounded-full bg-neon-green/90 px-4 py-2 text-sm font-semibold text-black hover:bg-neon-green transition-colors"
+          >
+            Entrar
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
+  const [loginOpen, setLoginOpen] = useState(false)
+
   return (
     <>
       <Preloader />
       <CursorEffect />
+      <LoginPanel open={loginOpen} onClose={() => setLoginOpen(false)} />
       <div className="fixed inset-0 -z-10 bg-grain blur-3xl opacity-50" />
       <div className="noisy" />
       <main className="snap-y snap-mandatory h-screen overflow-y-scroll scroll-smooth">
-        <Header />
+        <Header onOpenLogin={() => setLoginOpen(true)} />
         
         <SectionSnap id="inicio">
           <Hero />
@@ -35,11 +86,11 @@ export default function App() {
             <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
               <div className="shine rounded-2xl border border-white/10 bg-white/[0.02] p-8 hover:bg-white/[0.05] transition-colors group">
                 <div className="text-white/60 text-sm font-medium uppercase tracking-wider mb-2">WhatsApp</div>
-                <div className="text-2xl font-light text-neon-green group-hover:scale-105 transition-transform origin-left">+55 (99) 99999-9999</div>
+                <div className="text-2xl font-light text-neon-green group-hover:scale-105 transition-transform origin-left">(19) 97155-3424</div>
               </div>
               <div className="shine rounded-2xl border border-white/10 bg-white/[0.02] p-8 hover:bg-white/[0.05] transition-colors group">
                 <div className="text-white/60 text-sm font-medium uppercase tracking-wider mb-2">Endereço</div>
-                <div className="text-2xl font-light text-neon-pink group-hover:scale-105 transition-transform origin-left">Rua do Forró, 123 • Brasil</div>
+                <div className="text-2xl font-light text-neon-pink group-hover:scale-105 transition-transform origin-left">Av Armando Salles Nº 2572 • Piracicaba - SP</div>
               </div>
             </div>
           </div>
