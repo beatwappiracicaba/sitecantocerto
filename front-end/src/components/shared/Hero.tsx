@@ -13,9 +13,19 @@ export default function Hero() {
 
   return (
     <section ref={ref} className="relative overflow-hidden min-h-[90vh] flex items-center justify-center">
+      {/* Background Image */}
+      <div className="absolute inset-0 z-0">
+        <img 
+          src="/images/casadeshow.png" 
+          alt="Casa de Show" 
+          className="w-full h-full object-cover opacity-30"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
+      </div>
+      
       <motion.div 
         style={{ y, opacity }}
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 pointer-events-none z-5"
       >
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[140vmin] h-[140vmin] rounded-full blur-[120px] opacity-40 mix-blend-screen pulse" style={{ background: 'radial-gradient(circle, rgba(255,46,146,0.5) 0%, rgba(37,194,255,0.5) 35%, rgba(53,255,157,0.5) 70%, transparent 75%)' }} />
       </motion.div>
@@ -25,7 +35,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-          className="text-6xl md:text-8xl font-black tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-white/50"
+          className="text-6xl md:text-8xl font-black tracking-tight leading-tight text-white drop-shadow-2xl"
         >
           Forró de<br />Outro Mundo
         </motion.h1>
@@ -34,7 +44,7 @@ export default function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 1, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-8 text-xl md:text-2xl text-white/60 max-w-2xl mx-auto font-light"
+          className="mt-8 text-xl md:text-2xl text-white/80 max-w-2xl mx-auto font-medium drop-shadow-lg"
         >
           Sinta o ritmo pulsar, brilhe nas luzes e viva uma experiência surreal.
         </motion.p>
