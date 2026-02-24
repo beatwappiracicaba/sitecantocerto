@@ -1,10 +1,4 @@
 name = "sitecantocerto"
-main = "front-end/dist"
 compatibility_date = "2024-01-01"
+pages_build_output_dir = "front-end/dist"
 
-[build]
-command = "cd front-end && npm ci && npm run build"
-cwd = "front-end"
-
-[build.upload]
-dir = "front-end/dist"
