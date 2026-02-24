@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+  <rect width="64" height="64" fill="#0a0a0f"/>
+  <circle cx="32" cy="32" r="20" fill="#ffe359"/>
+  <text x="32" y="36" font-size="18" text-anchor="middle" fill="#0a0a0f">F</text>
+</svg>
