@@ -25,7 +25,7 @@ function LoginPanel({ open, onClose }: LoginPanelProps) {
         >
           Fechar
         </button>
-        <h2 className="text-2xl font-semibold mb-6 text-center">Entrar</h2>
+        <h2 className="text-2xl font-semibold mb-6 text-center">Acesso Autorizado</h2>
         <form className="space-y-4">
           <div className="text-left">
             <label className="block text-sm text-white/60 mb-1">E-mail</label>
