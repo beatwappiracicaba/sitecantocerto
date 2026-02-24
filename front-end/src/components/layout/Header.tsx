@@ -24,7 +24,7 @@ export default function Header() {
             alt="Canto Certo"
             width={140}
             height={48}
-            className={`block h-12 w-auto group-hover:scale-105 transition-transform ${scrolled ? 'drop-shadow-[0_0_12px_rgba(255,255,255,0.35)]' : 'drop-shadow-[0_0_12px_rgba(255,227,89,0.35)]'}`}
+            className={`h-12 w-auto group-hover:scale-105 transition-transform ${scrolled ? 'drop-shadow-[0_0_12px_rgba(255,255,255,0.35)]' : 'drop-shadow-[0_0_12px_rgba(255,227,89,0.35)]'}`}
             loading="eager"
           />
         </button>
