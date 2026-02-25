@@ -17,6 +17,9 @@ type Album = {
 type VideoItem = {
   id: string
   url: string
+  start_sec?: number
+  end_sec?: number
+  description?: string
 }
 
 export default function Galeria() {
@@ -34,17 +37,30 @@ export default function Galeria() {
       setAlbums((data as Album[]) || [])
     }
     const loadVideos = async () => {
-      const { data } = await supabase
-        .from('videos')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (data) {
-        const items: VideoItem[] = (data as any[]).map((item) => ({
-          id: item.storage_path || item.id,
-          url: item.url
-        }))
-        setVideos(items)
-      }
+      try {
+        const { data, error } = await supabase
+          .from('videos')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (!error && data) {
+          const items: VideoItem[] = (data as any[]).map((item) => ({
+            id: item.storage_path || item.id,
+            url: item.url,
+            start_sec: item.start_sec || undefined,
+            end_sec: item.end_sec || undefined,
+            description: item.description || undefined
+          }))
+          setVideos(items)
+          return
+        }
+      } catch {}
+      const list = await supabase.storage.from('gallery').list('videos', { limit: 12 } as any)
+      const files = (list.data || []) as { name: string }[]
+      const items: VideoItem[] = files.map((f) => {
+        const pub = supabase.storage.from('gallery').getPublicUrl(`videos/${f.name}`)
+        return { id: f.name, url: pub.data.publicUrl }
+      })
+      setVideos(items)
     }
     loadAlbums()
     loadVideos()
@@ -53,18 +69,28 @@ export default function Galeria() {
   useEffect(() => {
     const loadAlbumPhotos = async () => {
       if (!selectedAlbum) return
-      const { data } = await supabase
-        .from('galeria')
-        .select('*')
-        .eq('album_slug', selectedAlbum.slug)
-        .order('created_at', { ascending: false })
-      if (data) {
-        const items: PhotoItem[] = (data as any[]).map((item) => ({
-          id: item.storage_path || item.id,
-          url: item.url
-        }))
-        setAlbumPhotos(items)
-      }
+      try {
+        const { data, error } = await supabase
+          .from('galeria')
+          .select('*')
+          .eq('album_slug', selectedAlbum.slug)
+          .order('created_at', { ascending: false })
+        if (!error && data) {
+          const items: PhotoItem[] = (data as any[]).map((item) => ({
+            id: item.storage_path || item.id,
+            url: item.url
+          }))
+          setAlbumPhotos(items)
+          return
+        }
+      } catch {}
+      const list = await supabase.storage.from('gallery').list(`events/${selectedAlbum.slug}`, { limit: 200 } as any)
+      const files = (list.data || []) as { name: string }[]
+      const items: PhotoItem[] = files.map((f) => {
+        const pub = supabase.storage.from('gallery').getPublicUrl(`events/${selectedAlbum.slug}/${f.name}`)
+        return { id: f.name, url: pub.data.publicUrl }
+      })
+      setAlbumPhotos(items)
     }
     loadAlbumPhotos()
   }, [selectedAlbum])
@@ -92,16 +118,19 @@ export default function Galeria() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1, duration: 0.6 }}
-                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-6 text-left hover:bg-white/[0.06] transition-colors"
+                className="group relative overflow-hidden rounded-3xl p-1 text-left"
+                style={{ backgroundImage: 'linear-gradient(90deg,#fde047,#facc15,#fde047)', boxShadow: '0 0 16px rgba(250, 204, 21, 0.5)' }}
               >
+                <div className="rounded-[20px] bg-white/[0.02] p-6 hover:bg-white/[0.06] transition-colors">
                 <div className="text-neon-blue font-bold tracking-wider text-sm uppercase mb-2">
                   {new Date(a.date).toLocaleDateString('pt-BR')}
                 </div>
                 <div className="text-2xl font-medium text-white group-hover:text-neon-yellow transition-colors">
                   {a.name}
                 </div>
-                <div className="mt-4 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/60 group-hover:border-neon-green/30 group-hover:text-neon-green transition-all">
+                <div className="mt-4 inline-flex items-center rounded-full border border-yellow-400 bg-black/40 px-4 py-1.5 text-sm text-yellow-300">
                   Abrir álbum
+                </div>
                 </div>
               </motion.button>
             ))}
@@ -124,9 +153,24 @@ export default function Galeria() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1, duration: 0.6 }}
-                className="relative overflow-hidden rounded-3xl border border-white/10 bg-black/40"
+                className="relative overflow-hidden rounded-3xl bg-black/40 p-1"
+                style={{ backgroundImage: 'linear-gradient(90deg,#fde047,#facc15,#fde047)', boxShadow: '0 0 16px rgba(250, 204, 21, 0.5)' }}
               >
-                <video src={v.url} controls className="w-full h-full rounded-3xl" />
+                <div className="rounded-3xl bg-black">
+                  <video
+                    src={v.url}
+                    controls
+                    className="w-full h-full rounded-3xl"
+                    onLoadedMetadata={(e) => {
+                      const el = e.currentTarget as HTMLVideoElement
+                      if (typeof v.start_sec === 'number') el.currentTime = v.start_sec
+                    }}
+                    onTimeUpdate={(e) => {
+                      const el = e.currentTarget as HTMLVideoElement
+                      if (typeof v.end_sec === 'number' && el.currentTime > v.end_sec) el.pause()
+                    }}
+                  />
+                </div>
               </motion.div>
             ))}
           </div>
@@ -155,17 +199,21 @@ export default function Galeria() {
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.05, duration: 0.5 }}
-                className="group relative aspect-[4/3] overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02]"
+                className="group relative aspect-[4/3] overflow-hidden rounded-3xl p-1"
+                style={{ backgroundImage: 'linear-gradient(90deg,#fde047,#facc15,#fde047)', boxShadow: '0 0 16px rgba(250, 204, 21, 0.5)' }}
               >
-                <img src={p.url} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <a
-                    href={`${p.url}?download=true`}
-                    className="rounded-full border border-white/20 bg-black/40 backdrop-blur-md px-6 py-2 text-white font-medium tracking-wide"
-                    download
-                  >
-                    Baixar
-                  </a>
+                <div className="absolute inset-0 rounded-[22px] bg-black" />
+                <div className="relative inset-0 w-full h-full rounded-[22px] overflow-hidden">
+                  <img src={p.url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <a
+                      href={`${p.url}?download=true`}
+                      className="rounded-full border border-yellow-400 bg-black/40 backdrop-blur-md px-6 py-2 text-yellow-300 font-medium tracking-wide"
+                      download
+                    >
+                      Baixar
+                    </a>
+                  </div>
                 </div>
               </motion.div>
             ))}

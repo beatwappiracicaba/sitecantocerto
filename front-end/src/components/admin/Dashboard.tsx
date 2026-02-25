@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabaseClient'
@@ -34,6 +34,105 @@ const EditIcon = () => (
   </svg>
 )
 
+type CropEditorProps = {
+  file: File
+  preview: string
+  onCancel: () => void
+  onApply: (blob: Blob) => void
+}
+
+function CropEditor({ file, preview, onCancel, onApply }: CropEditorProps) {
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const [scale, setScale] = useState(1)
+  const [offsetX, setOffsetX] = useState(0)
+  const [offsetY, setOffsetY] = useState(0)
+  const draggingRef = useRef(false)
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null)
+
+  const onDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    draggingRef.current = true
+    const p = 'touches' in e ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: (e as React.MouseEvent).clientX, y: (e as React.MouseEvent).clientY }
+    lastPosRef.current = p
+  }
+  const onMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!draggingRef.current || !lastPosRef.current) return
+    const p = 'touches' in e ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: (e as React.MouseEvent).clientX, y: (e as React.MouseEvent).clientY }
+    const dx = p.x - lastPosRef.current.x
+    const dy = p.y - lastPosRef.current.y
+    setOffsetX(v => v + dx)
+    setOffsetY(v => v + dy)
+    lastPosRef.current = p
+  }
+  const onUp = () => {
+    draggingRef.current = false
+    lastPosRef.current = null
+  }
+  const applyCrop = async () => {
+    const img = imgRef.current
+    const vp = viewportRef.current
+    if (!img || !vp) return
+    const W = vp.clientWidth
+    const H = vp.clientHeight
+    const natW = img.naturalWidth
+    const natH = img.naturalHeight
+    const srcX = Math.max(0, Math.min(natW, (-offsetX) / scale))
+    const srcY = Math.max(0, Math.min(natH, (-offsetY) / scale))
+    const srcW = Math.max(1, Math.min(natW - srcX, W / scale))
+    const srcH = Math.max(1, Math.min(natH - srcY, H / scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, W, H)
+    canvas.toBlob((blob) => {
+      if (blob) onApply(blob)
+    }, 'image/jpeg', 0.92)
+  }
+
+  return (
+    <div>
+      <div
+        ref={viewportRef}
+        onMouseDown={onDown as any}
+        onMouseMove={onMove as any}
+        onMouseUp={onUp as any}
+        onMouseLeave={onUp}
+        onTouchStart={onDown as any}
+        onTouchMove={onMove as any}
+        onTouchEnd={onUp}
+        className="relative mx-auto mb-4 overflow-hidden rounded-lg border border-white/10 bg-black"
+        style={{ width: 480, height: 360, cursor: 'grab' }}
+      >
+        <img
+          ref={imgRef}
+          src={preview}
+          alt=""
+          className="select-none"
+          style={{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`, userSelect: 'none', pointerEvents: 'none' }}
+        />
+      </div>
+      <div className="flex items-center gap-4 mb-4">
+        <span className="text-white/60 text-sm">Zoom</span>
+        <input
+          type="range"
+          min={1}
+          max={3}
+          step={0.01}
+          value={scale}
+          onChange={(e) => setScale(parseFloat(e.target.value))}
+          className="w-full"
+        />
+      </div>
+      <div className="flex justify-end gap-3">
+        <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-white/20 text-white hover:bg-white/5">Cancelar</button>
+        <button onClick={applyCrop} className="px-4 py-2 rounded-lg bg-neon-green text-black hover:bg-neon-green/90">Aplicar</button>
+      </div>
+    </div>
+  )
+}
+
 export type Show = {
   id: string
   nome: string
@@ -66,9 +165,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   type PendingFile = { file: File; preview: string; name: string; type: 'image' | 'video' }
   const [pendingImages, setPendingImages] = useState<PendingFile[]>([])
   const [pendingVideos, setPendingVideos] = useState<PendingFile[]>([])
+  const [showVideoModal, setShowVideoModal] = useState(false)
+  const [videoStep, setVideoStep] = useState(0)
+  const [videoMeta, setVideoMeta] = useState<{ desc: string; start: number; end: number }[]>([])
   const [eventName, setEventName] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [showGalleryModal, setShowGalleryModal] = useState(false)
+  const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null)
   
   const [showForm, setShowForm] = useState({
     nome: '',
@@ -272,6 +376,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       setPendingImages(prev => [...prev, ...staged])
     }
   }
+  const handleDropImages = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+    if (files.length) {
+      const staged = files.map(file => ({
+        file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+        type: 'image' as const
+      }))
+      setPendingImages(prev => [...prev, ...staged])
+    }
+    setIsDraggingOver(false)
+  }
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -332,7 +450,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }
 
   const confirmUploadVideos = async () => {
-    for (const item of pendingVideos) {
+    for (let i = 0; i < pendingVideos.length; i++) {
+      const item = pendingVideos[i]
+      const meta = videoMeta[i] || { desc: '', start: 0, end: 0 }
       const safeName = item.name.replace(/\s+/g, '-')
       const path = `videos/${Date.now()}-${safeName}`
       const up = await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
@@ -341,7 +461,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         await supabase.from('videos').insert({
           filename: safeName,
           url: pub.data.publicUrl,
-          storage_path: path
+          storage_path: path,
+          description: meta.desc,
+          start_sec: meta.start || null,
+          end_sec: meta.end || null
         })
       }
     }
@@ -647,27 +770,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     </label>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm text-white/60 mb-1">Nome do Evento</label>
-                    <input
-                      type="text"
-                      value={eventName}
-                      onChange={(e) => setEventName(e.target.value)}
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
-                      placeholder="Ex: Baile de Sábado"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-white/60 mb-1">Dia do Evento</label>
-                    <input
-                      type="date"
-                      value={eventDate}
-                      onChange={(e) => setEventDate(e.target.value)}
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
-                    />
-                  </div>
-                </div>
                 {!!pendingImages.length && (
                   <div className="mt-6">
                     <h4 className="text-white/80 mb-2">Imagens selecionadas</h4>
@@ -727,7 +829,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                       ))}
                     </div>
                     <button
-                      onClick={confirmUploadVideos}
+                      onClick={() => {
+                        setVideoMeta(pendingVideos.map(() => ({ desc: '', start: 0, end: 0 })))
+                        setVideoStep(0)
+                        setShowVideoModal(true)
+                      }}
                       className="mt-3 px-4 py-2 rounded bg-neon-pink text-black hover:bg-neon-pink/90"
                     >
                       Enviar {pendingVideos.length} vídeos
@@ -822,6 +928,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
                 <div className="mb-6">
                   <label className="block text-sm text-white/60 mb-2">Selecionar Imagens</label>
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true) }}
+                    onDragLeave={() => setIsDraggingOver(false)}
+                    onDrop={handleDropImages}
+                    className={`mb-3 rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors ${isDraggingOver ? 'border-neon-green bg-neon-green/10 text-neon-green' : 'border-white/10 bg-white/5 text-white/60'}`}
+                  >
+                    Arraste e solte as fotos aqui
+                  </div>
                   <input
                     type="file"
                     multiple
@@ -848,12 +962,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                             className="mt-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
                             placeholder="Nome da imagem"
                           />
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => setEditingImageIndex(i)}
+                              className="w-full text-xs px-2 py-1 rounded bg-white/10 text-white hover:bg-white/20"
+                            >
+                              Editar
+                            </button>
                           <button
                             onClick={() => removePendingImage(i)}
                             className="mt-2 w-full text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
                           >
                             Remover
                           </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -880,6 +1002,170 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           )}
         </AnimatePresence>
       </div>
+        <AnimatePresence>
+          {editingImageIndex !== null && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+              onClick={() => setEditingImageIndex(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-gray-900 rounded-lg p-6 max-w-3xl w-full border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-xl font-bold text-white mb-4">Editar Imagem</h3>
+                <CropEditor
+                  file={pendingImages[editingImageIndex].file}
+                  preview={pendingImages[editingImageIndex].preview}
+                  onCancel={() => setEditingImageIndex(null)}
+                  onApply={async (blob) => {
+                    const orig = pendingImages[editingImageIndex!]
+                    const f = new File([blob], orig.name, { type: 'image/jpeg' })
+                    const url = URL.createObjectURL(f)
+                    setPendingImages(prev => prev.map((x, idx) => idx === editingImageIndex ? { ...x, file: f, preview: url } : x))
+                    setEditingImageIndex(null)
+                  }}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {showVideoModal && pendingVideos[videoStep] && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+              onClick={() => setShowVideoModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-gray-900 rounded-lg p-6 max-w-3xl w-full border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-xl font-bold text-white mb-4">Preparar Vídeo</h3>
+                <div className="relative rounded-2xl p-1 bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500">
+                  <div className="rounded-xl bg-black">
+                    <video
+                      src={pendingVideos[videoStep].preview}
+                      className="w-full rounded-xl"
+                      controls
+                      onLoadedMetadata={(e) => {
+                        const dur = (e.currentTarget as HTMLVideoElement).duration
+                        setVideoMeta(prev => {
+                          const next = [...prev]
+                          const cur = next[videoStep]
+                          next[videoStep] = { desc: cur?.desc || '', start: cur?.start ?? 0, end: cur?.end ?? Math.floor(dur) }
+                          return next
+                        })
+                      }}
+                      onTimeUpdate={(e) => {
+                        const v = e.currentTarget as HTMLVideoElement
+                        const meta = videoMeta[videoStep]
+                        if (meta && meta.end && v.currentTime > meta.end) v.pause()
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-3">
+                    <label className="block text-sm text-white/60 mb-1">Descrição</label>
+                    <input
+                      type="text"
+                      value={videoMeta[videoStep]?.desc || ''}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setVideoMeta(prev => {
+                          const next = [...prev]
+                          const cur = next[videoStep] || { desc: '', start: 0, end: 0 }
+                          next[videoStep] = { ...cur, desc: val }
+                          return next
+                        })
+                      }}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                      placeholder="Descreva o vídeo"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Início</label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={videoMeta[videoStep]?.end || 60}
+                      step={1}
+                      value={videoMeta[videoStep]?.start || 0}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10)
+                        setVideoMeta(prev => {
+                          const next = [...prev]
+                          const cur = next[videoStep] || { desc: '', start: 0, end: 0 }
+                          const end = Math.max(val + 1, cur.end || val + 10)
+                          next[videoStep] = { ...cur, start: val, end }
+                          return next
+                        })
+                      }}
+                    />
+                    <div className="text-white/60 text-sm">{videoMeta[videoStep]?.start || 0}s</div>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Fim</label>
+                    <input
+                      type="range"
+                      min={videoMeta[videoStep]?.start || 0}
+                      max={Math.max((videoMeta[videoStep]?.end || 60), (videoMeta[videoStep]?.start || 0) + 1)}
+                      step={1}
+                      value={videoMeta[videoStep]?.end || 0}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10)
+                        setVideoMeta(prev => {
+                          const next = [...prev]
+                          const cur = next[videoStep] || { desc: '', start: 0, end: 0 }
+                          const start = Math.min(val - 1, cur.start || 0)
+                          next[videoStep] = { ...cur, end: val, start }
+                          return next
+                        })
+                      }}
+                    />
+                    <div className="text-white/60 text-sm">{videoMeta[videoStep]?.end || 0}s</div>
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-between">
+                  <button
+                    onClick={() => {
+                      setShowVideoModal(false)
+                    }}
+                    className="px-4 py-2 rounded-lg border border-white/20 text-white hover:bg-white/5"
+                  >
+                    Cancelar
+                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        if (videoStep < pendingVideos.length - 1) {
+                          setVideoStep(v => v + 1)
+                        } else {
+                          setShowVideoModal(false)
+                          confirmUploadVideos()
+                        }
+                      }}
+                      className="px-4 py-2 rounded-lg bg-neon-pink text-black hover:bg-neon-pink/90"
+                    >
+                      {videoStep < pendingVideos.length - 1 ? 'Próximo' : 'Salvar vídeos'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
     </div>
   )
 }

@@ -69,6 +69,9 @@ create table public.videos (
   filename text not null,
   url text not null,
   storage_path text not null,
+  description text,
+  start_sec integer,
+  end_sec integer,
   created_at timestamp with time zone default now()
 );
 
