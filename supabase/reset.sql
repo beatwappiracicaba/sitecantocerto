@@ -33,13 +33,26 @@ create table public.shows (
   hora text not null,
   descricao text,
   imagem text,
+  preco text,
+  compra_via text,
+  compra_info text,
   ativo boolean default true,
+  created_at timestamp with time zone default now()
+);
+
+-- Criar tabela de álbuns de eventos
+create table public.albums (
+  id uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  name text not null,
+  date date not null,
   created_at timestamp with time zone default now()
 );
 
 -- Ativar RLS
 alter table public.profiles enable row level security;
 alter table public.shows enable row level security;
+alter table public.albums enable row level security;
 
 -- Políticas de acesso para profiles
 create policy "profiles_select_public" on public.profiles
@@ -59,6 +72,15 @@ create policy "shows_read_all" on public.shows
   for select using (true);
 
 create policy "shows_manage_auth" on public.shows
+  for all to authenticated
+  using (true)
+  with check (true);
+
+-- Políticas de acesso para albums
+create policy "albums_read_all" on public.albums
+  for select using (true);
+
+create policy "albums_manage_auth" on public.albums
   for all to authenticated
   using (true)
   with check (true);

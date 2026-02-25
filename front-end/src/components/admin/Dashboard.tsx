@@ -41,6 +41,9 @@ export type Show = {
   hora: string
   descricao: string
   imagem?: string
+  preco?: string
+  compra_via?: 'site' | 'whatsapp'
+  compra_info?: string
   ativo: boolean
 }
 
@@ -60,12 +63,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [shows, setShows] = useState<Show[]>([])
   
   const [galeria, setGaleria] = useState<GaleriaItem[]>([])
+  const [eventName, setEventName] = useState('')
+  const [eventDate, setEventDate] = useState('')
   
   const [showForm, setShowForm] = useState({
     nome: '',
     data: '',
     hora: '',
     descricao: '',
+    imagem: '',
+    preco: '',
+    compra_via: 'site' as 'site' | 'whatsapp',
+    compra_info: '',
     ativo: true
   })
   
@@ -120,6 +129,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             data: showForm.data,
             hora: showForm.hora,
             descricao: showForm.descricao,
+            preco: showForm.preco,
+            compra_via: showForm.compra_via,
+            compra_info: showForm.compra_info,
             ativo: showForm.ativo
           })
           .select('*')
@@ -134,11 +146,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               hora: s.hora,
               descricao: s.descricao || '',
               imagem: s.imagem || '',
+              preco: s.preco || '',
+              compra_via: (s.compra_via || 'site') as 'site' | 'whatsapp',
+              compra_info: s.compra_info || '',
               ativo: s.ativo ?? true
             }
           ])
         }
-        setShowForm({ nome: '', data: '', hora: '', descricao: '', ativo: true })
+        setShowForm({ nome: '', data: '', hora: '', descricao: '', imagem: '', preco: '', compra_via: 'site', compra_info: '', ativo: true })
         setShowFormVisible(false)
       }
       add()
@@ -146,7 +161,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }
 
   const handleEditShow = (show: Show) => {
-    setShowForm(show)
+    setShowForm({
+      nome: show.nome,
+      data: show.data,
+      hora: show.hora,
+      descricao: show.descricao || '',
+      imagem: show.imagem || '',
+      preco: show.preco || '',
+      compra_via: (show.compra_via || 'site') as 'site' | 'whatsapp',
+      compra_info: show.compra_info || '',
+      ativo: show.ativo
+    })
     setEditingShow(show.id)
     setShowFormVisible(true)
   }
@@ -161,6 +186,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             data: showForm.data,
             hora: showForm.hora,
             descricao: showForm.descricao,
+            preco: showForm.preco,
+            compra_via: showForm.compra_via,
+            compra_info: showForm.compra_info,
             ativo: showForm.ativo
           })
           .eq('id', editingShow)
@@ -169,7 +197,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             show.id === editingShow ? { ...showForm, id: editingShow } : show
           )
         )
-        setShowForm({ nome: '', data: '', hora: '', descricao: '', ativo: true })
+        setShowForm({ nome: '', data: '', hora: '', descricao: '', imagem: '', preco: '', compra_via: 'site', compra_info: '', ativo: true })
         setEditingShow(null)
         setShowFormVisible(false)
       }
@@ -197,23 +225,63 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     tog()
   }
 
+  const slugify = (text: string) =>
+    text
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+
+  const ensureAlbum = async (name: string, date: string) => {
+    const slug = `${date}-${slugify(name)}`
+    await supabase
+      .from('albums')
+      .upsert({ slug, name, date })
+    return slug
+  }
+
+  const handleFlyerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files && files[0]) {
+      const file = files[0]
+      const path = `flyers/${Date.now()}-${file.name}`
+      const up = await supabase.storage.from('gallery').upload(path, file, { upsert: true })
+      if (!up.error) {
+        const pub = supabase.storage.from('gallery').getPublicUrl(path)
+        setShowForm(prev => ({ ...prev, imagem: pub.data.publicUrl }))
+      }
+    }
+  }
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (files) {
       Array.from(files).forEach(async file => {
-        const path = `${Date.now()}-${file.name}`
+        const albumSlug = (eventName && eventDate) ? await ensureAlbum(eventName, eventDate) : ''
+        const basePath = albumSlug ? `events/${albumSlug}` : ''
+        const path = basePath ? `${basePath}/${Date.now()}-${file.name}` : `${Date.now()}-${file.name}`
         const up = await supabase.storage.from('gallery').upload(path, file, { upsert: true })
         if (!up.error) {
           const pub = supabase.storage.from('gallery').getPublicUrl(path)
           const newItem: GaleriaItem = {
             id: path,
             url: pub.data.publicUrl,
-            titulo: file.name.split('.')[0],
-            categoria: 'Eventos'
+            titulo: albumSlug ? `${eventName}` : file.name.split('.')[0],
+            categoria: albumSlug ? `Evento • ${eventDate}` : 'Eventos'
           }
           setGaleria(prev => [...prev, newItem])
         }
       })
+    }
+  }
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files) {
+      for (const file of Array.from(files)) {
+        const path = `videos/${Date.now()}-${file.name}`
+        await supabase.storage.from('gallery').upload(path, file, { upsert: true })
+      }
     }
   }
 
@@ -317,6 +385,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                         />
                       </div>
                       <div>
+                        <label className="block text-sm text-white/60 mb-1">Flyer</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFlyerUpload}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        />
+                        {showForm.imagem && (
+                          <img src={showForm.imagem} alt="" className="mt-2 h-24 w-auto rounded border border-white/10" />
+                        )}
+                      </div>
+                      <div>
                         <label className="block text-sm text-white/60 mb-1">Data</label>
                         <input
                           type="date"
@@ -332,6 +412,39 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           value={showForm.hora}
                           onChange={(e) => setShowForm({ ...showForm, hora: e.target.value })}
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-white/60 mb-1">Valor do Ingresso</label>
+                        <input
+                          type="text"
+                          value={showForm.preco}
+                          onChange={(e) => setShowForm({ ...showForm, preco: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                          placeholder="Ex: R$ 30"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-white/60 mb-1">Compra</label>
+                        <select
+                          value={showForm.compra_via}
+                          onChange={(e) => setShowForm({ ...showForm, compra_via: e.target.value as 'site' | 'whatsapp', compra_info: '' })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        >
+                          <option value="site">Site</option>
+                          <option value="whatsapp">WhatsApp</option>
+                        </select>
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="block text-sm text-white/60 mb-1">
+                          {showForm.compra_via === 'site' ? 'Link do Site' : 'Número do WhatsApp'}
+                        </label>
+                        <input
+                          type="text"
+                          value={showForm.compra_info}
+                          onChange={(e) => setShowForm({ ...showForm, compra_info: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                          placeholder={showForm.compra_via === 'site' ? 'https://...' : '(19) 9xxxx-xxxx'}
                         />
                       </div>
                       <div>
@@ -367,7 +480,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                         onClick={() => {
                           setShowFormVisible(false)
                           setEditingShow(null)
-                          setShowForm({ nome: '', data: '', hora: '', descricao: '', ativo: true })
+                          setShowForm({ nome: '', data: '', hora: '', descricao: '', imagem: '', preco: '', compra_via: 'site', compra_info: '', ativo: true })
                         }}
                         className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
                       >
@@ -441,19 +554,55 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-white">Gerenciar Galeria</h2>
-                <label className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer">
-                  <PlusIcon />
-                  Adicionar Imagens
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
-                </label>
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold text-white">Gerenciar Galeria</h2>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer">
+                      <PlusIcon />
+                      Adicionar Imagens
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 px-4 py-2 bg-neon-blue text-black rounded-lg hover:bg-neon-blue/90 transition-colors cursor-pointer">
+                      <PlusIcon />
+                      Adicionar Vídeos
+                      <input
+                        type="file"
+                        multiple
+                        accept="video/*"
+                        onChange={handleVideoUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Nome do Evento</label>
+                    <input
+                      type="text"
+                      value={eventName}
+                      onChange={(e) => setEventName(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                      placeholder="Ex: Baile de Sábado"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Dia do Evento</label>
+                    <input
+                      type="date"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Grid de Imagens */}
