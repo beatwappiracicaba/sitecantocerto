@@ -90,8 +90,8 @@ function AppContent() {
   const { user, logout } = useAuth()
   const [loginOpen, setLoginOpen] = useState(false)
 
-  // Se o usuário estiver logado, mostrar a dashboard
-  if (user) {
+  // Se o usuário estiver logado e com cargo Membro, mostrar a dashboard
+  if (user && user.role === 'Membro') {
     return <Dashboard onLogout={logout} />
   }
 

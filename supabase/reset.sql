@@ -63,8 +63,10 @@ create policy "shows_manage_auth" on public.shows
   using (true)
   with check (true);
 
--- Criar bucket público da galeria (se não existir)
-select storage.create_bucket('gallery', public => true);
+-- Criar bucket público da galeria (se não existir) de forma idempotente
+insert into storage.buckets (id, name, public)
+values ('gallery', 'gallery', true)
+on conflict (id) do nothing;
 
 -- Políticas de acesso para objetos do bucket 'gallery'
 create policy "read gallery" on storage.objects

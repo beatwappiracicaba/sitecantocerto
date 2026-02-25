@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 export type User = {
   id: string
   name: string
   email: string
-  role: 'admin' | 'user'
+  role: 'Membro' | 'Admin' | 'User'
 }
 
 type AuthContextType = {
@@ -38,12 +39,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { data } = await supabase.auth.getUser()
       const u = data.user
       if (u) {
-        setUser({
-          id: u.id,
-          name: u.user_metadata?.name || u.email?.split('@')[0] || 'Usuário',
-          email: u.email || '',
-          role: 'admin'
-        })
+        await syncProfile(u)
       }
       setIsLoading(false)
     }
@@ -51,12 +47,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user
       if (u) {
-        setUser({
-          id: u.id,
-          name: u.user_metadata?.name || u.email?.split('@')[0] || 'Usuário',
-          email: u.email || '',
-          role: 'admin'
-        })
+        syncProfile(u)
       } else {
         setUser(null)
       }
@@ -65,6 +56,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       sub.subscription.unsubscribe()
     }
   }, [])
+
+  const syncProfile = async (u: SupabaseUser) => {
+    const { data: profileData, error } = await supabase
+      .from('profiles')
+      .select('name, cargo, role, email')
+      .eq('id', u.id)
+      .single()
+    if (error || !profileData) {
+      await supabase
+        .from('profiles')
+        .upsert({
+          id: u.id,
+          email: u.email,
+          name: u.user_metadata?.name || u.email?.split('@')[0] || 'Usuário',
+          cargo: 'Membro',
+          role: 'Membro'
+        })
+    }
+    const role = profileData?.cargo || profileData?.role || 'Membro'
+    const name = profileData?.name || u.user_metadata?.name || u.email?.split('@')[0] || 'Usuário'
+    setUser({
+      id: u.id,
+      name,
+      email: u.email || '',
+      role: (role as User['role']) || 'Membro'
+    })
+  }
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true)
@@ -75,12 +93,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
     const u = data.user
     if (u) {
-      setUser({
-        id: u.id,
-        name: u.user_metadata?.name || u.email?.split('@')[0] || 'Usuário',
-        email: u.email || '',
-        role: 'admin'
-      })
+      await syncProfile(u)
       setIsLoading(false)
       return true
     }
