@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import Preloader from '@/components/shared/Preloader'
 import Header from '@/components/layout/Header'
 import Hero from '@/components/shared/Hero'
@@ -7,6 +8,7 @@ import Galeria from '@/components/shared/Galeria'
 import Footer from '@/components/layout/Footer'
 import CursorEffect from '@/components/shared/CursorEffect'
 import SectionSnap from '@/components/shared/SectionSnap'
+import Dashboard from '@/components/admin/Dashboard'
 
 type LoginPanelProps = {
   open: boolean
@@ -14,7 +16,26 @@ type LoginPanelProps = {
 }
 
 function LoginPanel({ open, onClose }: LoginPanelProps) {
+  const { login, isLoading } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+
   if (!open) return null
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    
+    const success = await login(email, password)
+    if (success) {
+      onClose()
+      setEmail('')
+      setPassword('')
+    } else {
+      setError('Credenciais inválidas')
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-md">
@@ -26,28 +47,38 @@ function LoginPanel({ open, onClose }: LoginPanelProps) {
           Fechar
         </button>
         <h2 className="text-2xl font-semibold mb-6 text-center">Acesso Autorizado</h2>
-        <form className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="text-red-400 text-sm text-center mb-4">{error}</div>
+          )}
           <div className="text-left">
             <label className="block text-sm text-white/60 mb-1">E-mail</label>
             <input
               type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
               placeholder="seu@email.com"
+              required
             />
           </div>
           <div className="text-left">
             <label className="block text-sm text-white/60 mb-1">Senha</label>
             <input
               type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
               placeholder="••••••••"
+              required
             />
           </div>
           <button
             type="submit"
-            className="mt-4 w-full rounded-full bg-neon-green/90 px-4 py-2 text-sm font-semibold text-black hover:bg-neon-green transition-colors"
+            disabled={isLoading}
+            className="mt-4 w-full rounded-full bg-neon-green/90 px-4 py-2 text-sm font-semibold text-black hover:bg-neon-green transition-colors disabled:opacity-50"
           >
-            Entrar
+            {isLoading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
       </div>
@@ -55,9 +86,16 @@ function LoginPanel({ open, onClose }: LoginPanelProps) {
   )
 }
 
-export default function App() {
+function AppContent() {
+  const { user, logout } = useAuth()
   const [loginOpen, setLoginOpen] = useState(false)
 
+  // Se o usuário estiver logado, mostrar a dashboard
+  if (user) {
+    return <Dashboard onLogout={logout} />
+  }
+
+  // Se não estiver logado, mostrar o site normal
   return (
     <>
       <Preloader />
@@ -100,5 +138,13 @@ export default function App() {
         </SectionSnap>
       </main>
     </>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }

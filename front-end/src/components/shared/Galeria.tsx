@@ -1,16 +1,29 @@
 'use client'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+import { supabase } from '@/lib/supabaseClient'
 
-const photos = [
-  { id: 1, color: 'from-neon-pink to-neon-blue' },
-  { id: 2, color: 'from-neon-green to-neon-pink' },
-  { id: 3, color: 'from-neon-blue to-neon-green' },
-  { id: 4, color: 'from-neon-yellow to-neon-pink' },
-  { id: 5, color: 'from-neon-pink to-neon-yellow' },
-  { id: 6, color: 'from-neon-blue to-neon-yellow' }
-]
+type PhotoItem = {
+  id: string
+  url: string
+}
 
 export default function Galeria() {
+  const [photos, setPhotos] = useState<PhotoItem[]>([])
+
+  useEffect(() => {
+    const load = async () => {
+      const list = await supabase.storage.from('gallery').list('', { limit: 60 })
+      const files = list.data || []
+      const items: PhotoItem[] = files.map(f => {
+        const pub = supabase.storage.from('gallery').getPublicUrl(f.name)
+        return { id: f.name, url: pub.data.publicUrl }
+      })
+      setPhotos(items)
+    }
+    load()
+  }, [])
+
   return (
     <div className="mx-auto max-w-6xl px-6 w-full">
       <motion.h2
@@ -33,12 +46,9 @@ export default function Galeria() {
             whileHover={{ scale: 1.05, rotate: Math.random() * 2 - 1 }}
             className="group relative aspect-[4/3] overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] cursor-none"
           >
-            <div className={`absolute inset-0 bg-gradient-to-br ${p.color} opacity-40 group-hover:opacity-60 transition-opacity duration-500`} />
+            <img src={p.url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
             <div className="absolute inset-0 bg-[radial-gradient(transparent,black)] opacity-60 group-hover:opacity-40 transition-opacity duration-500" />
-            
-            <motion.div
-              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-            >
+            <motion.div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className="rounded-full border border-white/20 bg-black/40 backdrop-blur-md px-6 py-2 text-white font-medium tracking-wide">
                 Ver Foto
               </div>

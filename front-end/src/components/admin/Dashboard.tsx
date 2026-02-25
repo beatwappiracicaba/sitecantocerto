@@ -1,0 +1,494 @@
+import { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabaseClient'
+
+// Ícones simples como componentes
+const CalendarIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+)
+
+const PhotoIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+  </svg>
+)
+
+const PlusIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  </svg>
+)
+
+const TrashIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+)
+
+const EditIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+  </svg>
+)
+
+export type Show = {
+  id: string
+  nome: string
+  data: string
+  hora: string
+  descricao: string
+  imagem?: string
+  ativo: boolean
+}
+
+export type GaleriaItem = {
+  id: string
+  url: string
+  titulo: string
+  categoria: string
+}
+
+type DashboardProps = {
+  onLogout: () => void
+}
+
+export default function Dashboard({ onLogout }: DashboardProps) {
+  const [activeTab, setActiveTab] = useState<'shows' | 'galeria'>('shows')
+  const [shows, setShows] = useState<Show[]>([])
+  
+  const [galeria, setGaleria] = useState<GaleriaItem[]>([])
+  
+  const [showForm, setShowForm] = useState({
+    nome: '',
+    data: '',
+    hora: '',
+    descricao: '',
+    ativo: true
+  })
+  
+  const [editingShow, setEditingShow] = useState<string | null>(null)
+  const [showFormVisible, setShowFormVisible] = useState(false)
+
+  useEffect(() => {
+    const loadShows = async () => {
+      const { data } = await supabase
+        .from('shows')
+        .select('*')
+        .order('data', { ascending: true })
+        .order('hora', { ascending: true })
+      if (data) {
+        const mapped = data.map((s: any) => ({
+          id: s.id?.toString?.() || s.id,
+          nome: s.nome,
+          data: s.data,
+          hora: s.hora,
+          descricao: s.descricao || '',
+          imagem: s.imagem || '',
+          ativo: s.ativo ?? true
+        })) as Show[]
+        setShows(mapped)
+      }
+    }
+    const loadGallery = async () => {
+      const list = await supabase.storage.from('gallery').list('', { limit: 100 })
+      const files = list.data || []
+      const items: GaleriaItem[] = files.map(f => {
+        const pub = supabase.storage.from('gallery').getPublicUrl(f.name)
+        return {
+          id: f.name,
+          url: pub.data.publicUrl,
+          titulo: f.name,
+          categoria: 'Eventos'
+        }
+      })
+      setGaleria(items)
+    }
+    loadShows()
+    loadGallery()
+  }, [])
+
+  const handleAddShow = () => {
+    if (showForm.nome && showForm.data && showForm.hora) {
+      const add = async () => {
+        const { data } = await supabase
+          .from('shows')
+          .insert({
+            nome: showForm.nome,
+            data: showForm.data,
+            hora: showForm.hora,
+            descricao: showForm.descricao,
+            ativo: showForm.ativo
+          })
+          .select('*')
+        if (data && data[0]) {
+          const s = data[0]
+          setShows([
+            ...shows,
+            {
+              id: s.id?.toString?.() || s.id,
+              nome: s.nome,
+              data: s.data,
+              hora: s.hora,
+              descricao: s.descricao || '',
+              imagem: s.imagem || '',
+              ativo: s.ativo ?? true
+            }
+          ])
+        }
+        setShowForm({ nome: '', data: '', hora: '', descricao: '', ativo: true })
+        setShowFormVisible(false)
+      }
+      add()
+    }
+  }
+
+  const handleEditShow = (show: Show) => {
+    setShowForm(show)
+    setEditingShow(show.id)
+    setShowFormVisible(true)
+  }
+
+  const handleUpdateShow = () => {
+    if (editingShow && showForm.nome && showForm.data && showForm.hora) {
+      const upd = async () => {
+        await supabase
+          .from('shows')
+          .update({
+            nome: showForm.nome,
+            data: showForm.data,
+            hora: showForm.hora,
+            descricao: showForm.descricao,
+            ativo: showForm.ativo
+          })
+          .eq('id', editingShow)
+        setShows(
+          shows.map(show =>
+            show.id === editingShow ? { ...showForm, id: editingShow } : show
+          )
+        )
+        setShowForm({ nome: '', data: '', hora: '', descricao: '', ativo: true })
+        setEditingShow(null)
+        setShowFormVisible(false)
+      }
+      upd()
+    }
+  }
+
+  const handleDeleteShow = (id: string) => {
+    const del = async () => {
+      await supabase.from('shows').delete().eq('id', id)
+      setShows(shows.filter(show => show.id !== id))
+    }
+    del()
+  }
+
+  const handleToggleShowStatus = (id: string) => {
+    const s = shows.find(sh => sh.id === id)
+    const next = s ? !s.ativo : true
+    const tog = async () => {
+      await supabase.from('shows').update({ ativo: next }).eq('id', id)
+      setShows(shows.map(show => 
+        show.id === id ? { ...show, ativo: next } : show
+      ))
+    }
+    tog()
+  }
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (files) {
+      Array.from(files).forEach(async file => {
+        const path = `${Date.now()}-${file.name}`
+        const up = await supabase.storage.from('gallery').upload(path, file, { upsert: true })
+        if (!up.error) {
+          const pub = supabase.storage.from('gallery').getPublicUrl(path)
+          const newItem: GaleriaItem = {
+            id: path,
+            url: pub.data.publicUrl,
+            titulo: file.name.split('.')[0],
+            categoria: 'Eventos'
+          }
+          setGaleria(prev => [...prev, newItem])
+        }
+      })
+    }
+  }
+
+  const handleDeleteImage = (id: string) => {
+    const rem = async () => {
+      await supabase.storage.from('gallery').remove([id])
+      setGaleria(galeria.filter(item => item.id !== id))
+    }
+    rem()
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-black via-purple-900/20 to-black">
+      {/* Header da Dashboard */}
+      <header className="bg-black/50 backdrop-blur-md border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+              <span className="text-sm text-white/60">Canto Certo Admin</span>
+            </div>
+            <button
+              onClick={onLogout}
+              className="px-4 py-2 text-sm text-white/70 hover:text-white transition-colors"
+            >
+              Sair
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Navegação */}
+        <div className="flex gap-4 mb-8">
+          <button
+            onClick={() => setActiveTab('shows')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'shows'
+                ? 'bg-neon-green text-black'
+                : 'bg-white/5 text-white/70 hover:bg-white/10'
+            }`}
+          >
+            <CalendarIcon />
+            Shows
+          </button>
+          <button
+            onClick={() => setActiveTab('galeria')}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
+              activeTab === 'galeria'
+                ? 'bg-neon-pink text-black'
+                : 'bg-white/5 text-white/70 hover:bg-white/10'
+            }`}
+          >
+            <PhotoIcon />
+            Galeria
+          </button>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {/* Aba Shows */}
+          {activeTab === 'shows' && (
+            <motion.div
+              key="shows"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Gerenciar Shows</h2>
+                <button
+                  onClick={() => setShowFormVisible(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-neon-green text-black rounded-lg hover:bg-neon-green/90 transition-colors"
+                >
+                  <PlusIcon />
+                  Novo Show
+                </button>
+              </div>
+
+              {/* Formulário de Show */}
+              <AnimatePresence>
+                {showFormVisible && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-white/5 rounded-lg p-6 mb-6 border border-white/10"
+                  >
+                    <h3 className="text-lg font-semibold text-white mb-4">
+                      {editingShow ? 'Editar Show' : 'Adicionar Novo Show'}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm text-white/60 mb-1">Nome do Show</label>
+                        <input
+                          type="text"
+                          value={showForm.nome}
+                          onChange={(e) => setShowForm({ ...showForm, nome: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                          placeholder="Nome do show"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-white/60 mb-1">Data</label>
+                        <input
+                          type="date"
+                          value={showForm.data}
+                          onChange={(e) => setShowForm({ ...showForm, data: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-white/60 mb-1">Horário</label>
+                        <input
+                          type="time"
+                          value={showForm.hora}
+                          onChange={(e) => setShowForm({ ...showForm, hora: e.target.value })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-white/60 mb-1">Status</label>
+                        <select
+                          value={showForm.ativo ? 'ativo' : 'inativo'}
+                          onChange={(e) => setShowForm({ ...showForm, ativo: e.target.value === 'ativo' })}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        >
+                          <option value="ativo">Ativo</option>
+                          <option value="inativo">Inativo</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <label className="block text-sm text-white/60 mb-1">Descrição</label>
+                      <textarea
+                        value={showForm.descricao}
+                        onChange={(e) => setShowForm({ ...showForm, descricao: e.target.value })}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                        rows={3}
+                        placeholder="Descrição do show"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={editingShow ? handleUpdateShow : handleAddShow}
+                        className="px-4 py-2 bg-neon-green text-black rounded-lg hover:bg-neon-green/90 transition-colors"
+                      >
+                        {editingShow ? 'Atualizar' : 'Adicionar'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowFormVisible(false)
+                          setEditingShow(null)
+                          setShowForm({ nome: '', data: '', hora: '', descricao: '', ativo: true })
+                        }}
+                        className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Lista de Shows */}
+              <div className="grid gap-4">
+                {shows.map((show) => (
+                  <motion.div
+                    key={show.id}
+                    layout
+                    className="bg-white/5 rounded-lg p-6 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-white mb-2">{show.nome}</h3>
+                        <div className="flex gap-4 text-sm text-white/60 mb-2">
+                          <span>📅 {new Date(show.data).toLocaleDateString('pt-BR')}</span>
+                          <span>🕐 {show.hora}</span>
+                        </div>
+                        <p className="text-white/80 mb-3">{show.descricao}</p>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs ${
+                            show.ativo ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {show.ativo ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleToggleShowStatus(show.id)}
+                          className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                          title={show.ativo ? 'Desativar' : 'Ativar'}
+                        >
+                          {show.ativo ? '🔒' : '✅'}
+                        </button>
+                        <button
+                          onClick={() => handleEditShow(show)}
+                          className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteShow(show.id)}
+                          className="p-2 text-white/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          title="Excluir"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Aba Galeria */}
+          {activeTab === 'galeria' && (
+            <motion.div
+              key="galeria"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Gerenciar Galeria</h2>
+                <label className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer">
+                  <PlusIcon />
+                  Adicionar Imagens
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Grid de Imagens */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {galeria.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    className="relative group bg-white/5 rounded-lg overflow-hidden border border-white/10"
+                  >
+                    <img
+                      src={item.url}
+                      alt={item.titulo}
+                      className="w-full h-48 object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        onClick={() => handleDeleteImage(item.id)}
+                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                        title="Excluir imagem"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                    <div className="p-3">
+                      <h4 className="text-white font-medium">{item.titulo}</h4>
+                      <p className="text-white/60 text-sm">{item.categoria}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
