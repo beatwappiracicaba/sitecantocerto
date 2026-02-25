@@ -8,10 +8,6 @@ type PhotoItem = {
   url: string
 }
 
-type FileItem = {
-  name: string
-}
-
 type Album = {
   slug: string
   name: string
@@ -38,13 +34,17 @@ export default function Galeria() {
       setAlbums((data as Album[]) || [])
     }
     const loadVideos = async () => {
-      const list = await supabase.storage.from('gallery').list('videos', { limit: 12, sortBy: { column: 'name', order: 'desc' } as any })
-      const files = (list.data as FileItem[]) || []
-      const items: VideoItem[] = files.map((f) => {
-        const pub = supabase.storage.from('gallery').getPublicUrl(`videos/${f.name}`)
-        return { id: f.name, url: pub.data.publicUrl }
-      })
-      setVideos(items)
+      const { data } = await supabase
+        .from('videos')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (data) {
+        const items: VideoItem[] = (data as any[]).map((item) => ({
+          id: item.storage_path || item.id,
+          url: item.url
+        }))
+        setVideos(items)
+      }
     }
     loadAlbums()
     loadVideos()
@@ -53,13 +53,18 @@ export default function Galeria() {
   useEffect(() => {
     const loadAlbumPhotos = async () => {
       if (!selectedAlbum) return
-      const list = await supabase.storage.from('gallery').list(`events/${selectedAlbum.slug}`, { limit: 200 })
-      const files = (list.data as FileItem[]) || []
-      const items: PhotoItem[] = files.map((f) => {
-        const pub = supabase.storage.from('gallery').getPublicUrl(`events/${selectedAlbum.slug}/${f.name}`)
-        return { id: f.name, url: pub.data.publicUrl }
-      })
-      setAlbumPhotos(items)
+      const { data } = await supabase
+        .from('galeria')
+        .select('*')
+        .eq('album_slug', selectedAlbum.slug)
+        .order('created_at', { ascending: false })
+      if (data) {
+        const items: PhotoItem[] = (data as any[]).map((item) => ({
+          id: item.storage_path || item.id,
+          url: item.url
+        }))
+        setAlbumPhotos(items)
+      }
     }
     loadAlbumPhotos()
   }, [selectedAlbum])

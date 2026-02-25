@@ -14,6 +14,8 @@ drop policy if exists "delete gallery" on storage.objects;
 -- Dropar tabelas (se existirem)
 drop table if exists public.shows cascade;
 drop table if exists public.profiles cascade;
+drop table if exists public.galeria cascade;
+drop table if exists public.videos cascade;
 
 -- Criar tabela de perfis
 create table public.profiles (
@@ -49,10 +51,33 @@ create table public.albums (
   created_at timestamp with time zone default now()
 );
 
+-- Criar tabela de galeria para salvar fotos
+create table public.galeria (
+  id uuid primary key default gen_random_uuid(),
+  album_slug text not null references public.albums(slug) on delete cascade,
+  filename text not null,
+  titulo text,
+  categoria text,
+  url text not null,
+  storage_path text not null,
+  created_at timestamp with time zone default now()
+);
+
+-- Criar tabela de vídeos
+create table public.videos (
+  id uuid primary key default gen_random_uuid(),
+  filename text not null,
+  url text not null,
+  storage_path text not null,
+  created_at timestamp with time zone default now()
+);
+
 -- Ativar RLS
 alter table public.profiles enable row level security;
 alter table public.shows enable row level security;
 alter table public.albums enable row level security;
+alter table public.galeria enable row level security;
+alter table public.videos enable row level security;
 
 -- Políticas de acesso para profiles
 create policy "profiles_select_public" on public.profiles
@@ -81,6 +106,24 @@ create policy "albums_read_all" on public.albums
   for select using (true);
 
 create policy "albums_manage_auth" on public.albums
+  for all to authenticated
+  using (true)
+  with check (true);
+
+-- Políticas de acesso para galeria
+create policy "galeria_read_all" on public.galeria
+  for select using (true);
+
+create policy "galeria_manage_auth" on public.galeria
+  for all to authenticated
+  using (true)
+  with check (true);
+
+-- Políticas de acesso para vídeos
+create policy "videos_read_all" on public.videos
+  for select using (true);
+
+create policy "videos_manage_auth" on public.videos
   for all to authenticated
   using (true)
   with check (true);

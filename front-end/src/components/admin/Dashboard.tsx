@@ -68,6 +68,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [pendingVideos, setPendingVideos] = useState<PendingFile[]>([])
   const [eventName, setEventName] = useState('')
   const [eventDate, setEventDate] = useState('')
+  const [showGalleryModal, setShowGalleryModal] = useState(false)
   
   const [showForm, setShowForm] = useState({
     nome: '',
@@ -105,18 +106,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     }
     const loadGallery = async () => {
-      const list = await supabase.storage.from('gallery').list('', { limit: 100 })
-      const files = list.data || []
-      const items: GaleriaItem[] = files.map((f: { name: string }) => {
-        const pub = supabase.storage.from('gallery').getPublicUrl(f.name)
-        return {
-          id: f.name,
-          url: pub.data.publicUrl,
-          titulo: f.name,
-          categoria: 'Eventos'
-        }
-      })
-      setGaleria(items)
+      // Carregar imagens da tabela galeria
+      const { data: galeriaData } = await supabase
+        .from('galeria')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (galeriaData) {
+        const items: GaleriaItem[] = galeriaData.map((item: any) => ({
+          id: item.storage_path,
+          url: item.url,
+          titulo: item.titulo || item.filename,
+          categoria: item.categoria || 'Eventos'
+        }))
+        setGaleria(items)
+      }
     }
     loadShows()
     loadGallery()
@@ -292,12 +296,25 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const confirmUploadImages = async () => {
     const albumSlug = (eventName && eventDate) ? await ensureAlbum(eventName, eventDate) : ''
     const basePath = albumSlug ? `events/${albumSlug}` : ''
+    
     for (const item of pendingImages) {
       const safeName = item.name.replace(/\s+/g, '-')
       const path = basePath ? `${basePath}/${Date.now()}-${safeName}` : `${Date.now()}-${safeName}`
       const up = await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
+      
       if (!up.error) {
         const pub = supabase.storage.from('gallery').getPublicUrl(path)
+        
+        // Salvar na tabela de galeria
+        await supabase.from('galeria').insert({
+          album_slug: albumSlug,
+          filename: safeName,
+          titulo: albumSlug ? `${eventName}` : safeName.split('.')[0],
+          categoria: albumSlug ? `Evento • ${eventDate}` : 'Eventos',
+          url: pub.data.publicUrl,
+          storage_path: path
+        })
+        
         const newItem: GaleriaItem = {
           id: path,
           url: pub.data.publicUrl,
@@ -307,21 +324,39 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setGaleria(prev => [...prev, newItem])
       }
     }
+    
     setPendingImages([])
+    setShowGalleryModal(false)
+    setEventName('')
+    setEventDate('')
   }
 
   const confirmUploadVideos = async () => {
     for (const item of pendingVideos) {
       const safeName = item.name.replace(/\s+/g, '-')
       const path = `videos/${Date.now()}-${safeName}`
-      await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
+      const up = await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
+      if (!up.error) {
+        const pub = supabase.storage.from('gallery').getPublicUrl(path)
+        await supabase.from('videos').insert({
+          filename: safeName,
+          url: pub.data.publicUrl,
+          storage_path: path
+        })
+      }
     }
     setPendingVideos([])
   }
 
   const handleDeleteImage = (id: string) => {
     const rem = async () => {
+      // Remover do storage
       await supabase.storage.from('gallery').remove([id])
+      
+      // Remover da tabela galeria
+      await supabase.from('galeria').delete().eq('storage_path', id)
+      
+      // Atualizar estado local
       setGaleria(galeria.filter(item => item.id !== id))
     }
     rem()
@@ -592,17 +627,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold text-white">Gerenciar Galeria</h2>
                   <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer">
-                      <PlusIcon />
-                      Adicionar Imagens
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                      />
-                    </label>
+                    <button
+                    onClick={() => setShowGalleryModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer"
+                  >
+                    <PlusIcon />
+                    Adicionar Imagens
+                  </button>
                     <label className="flex items-center gap-2 px-4 py-2 bg-neon-blue text-black rounded-lg hover:bg-neon-blue/90 transition-colors cursor-pointer">
                       <PlusIcon />
                       Adicionar Vídeos
@@ -734,6 +765,117 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   </motion.div>
                 ))}
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal de Adicionar Imagens */}
+        <AnimatePresence>
+          {showGalleryModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+              onClick={() => setShowGalleryModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-gray-900 rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-white">Adicionar Imagens à Galeria</h3>
+                  <button
+                    onClick={() => setShowGalleryModal(false)}
+                    className="text-white/60 hover:text-white transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Nome do Evento</label>
+                    <input
+                      type="text"
+                      value={eventName}
+                      onChange={(e) => setEventName(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                      placeholder="Ex: Baile de Sábado"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-2">Dia do Evento</label>
+                    <input
+                      type="date"
+                      value={eventDate}
+                      onChange={(e) => setEventDate(e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                    />
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm text-white/60 mb-2">Selecionar Imagens</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
+                  />
+                </div>
+
+                {!!pendingImages.length && (
+                  <div className="mb-6">
+                    <h4 className="text-white/80 mb-3">Imagens selecionadas</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+                      {pendingImages.map((p, i) => (
+                        <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
+                          <img src={p.preview} alt="" className="w-full h-24 object-cover rounded" />
+                          <input
+                            type="text"
+                            value={p.name}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setPendingImages(prev => prev.map((x, idx) => idx === i ? { ...x, name: val } : x))
+                            }}
+                            className="mt-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+                            placeholder="Nome da imagem"
+                          />
+                          <button
+                            onClick={() => removePendingImage(i)}
+                            className="mt-2 w-full text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowGalleryModal(false)}
+                    className="px-4 py-2 rounded-lg border border-white/20 text-white hover:bg-white/5 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmUploadImages}
+                    disabled={!pendingImages.length || !eventName || !eventDate}
+                    className="px-4 py-2 rounded-lg bg-neon-green text-black hover:bg-neon-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Salvar Imagens
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
