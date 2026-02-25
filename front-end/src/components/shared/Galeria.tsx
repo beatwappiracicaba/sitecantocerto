@@ -8,14 +8,18 @@ type PhotoItem = {
   url: string
 }
 
+type FileItem = {
+  name: string
+}
+
 export default function Galeria() {
   const [photos, setPhotos] = useState<PhotoItem[]>([])
 
   useEffect(() => {
     const load = async () => {
       const list = await supabase.storage.from('gallery').list('', { limit: 60 })
-      const files = list.data || []
-      const items: PhotoItem[] = files.map(f => {
+      const files = (list.data as FileItem[]) || []
+      const items: PhotoItem[] = files.map((f: FileItem) => {
         const pub = supabase.storage.from('gallery').getPublicUrl(f.name)
         return { id: f.name, url: pub.data.publicUrl }
       })
