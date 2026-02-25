@@ -34,6 +34,12 @@ const EditIcon = () => (
   </svg>
 )
 
+const XIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+)
+
 type CropEditorProps = {
   file: File
   preview: string
@@ -49,6 +55,21 @@ function CropEditor({ file, preview, onCancel, onApply }: CropEditorProps) {
   const [offsetY, setOffsetY] = useState(0)
   const draggingRef = useRef(false)
   const lastPosRef = useRef<{ x: number; y: number } | null>(null)
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    const vp = viewportRef.current
+    if (vp) {
+      const sX = vp.clientWidth / img.naturalWidth
+      const sY = vp.clientHeight / img.naturalHeight
+      const initialScale = Math.min(sX, sY)
+      setScale(initialScale)
+      const renderedW = img.naturalWidth * initialScale
+      const renderedH = img.naturalHeight * initialScale
+      setOffsetX((vp.clientWidth - renderedW) / 2)
+      setOffsetY((vp.clientHeight - renderedH) / 2)
+    }
+  }
 
   const onDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     draggingRef.current = true
@@ -72,23 +93,31 @@ function CropEditor({ file, preview, onCancel, onApply }: CropEditorProps) {
     const img = imgRef.current
     const vp = viewportRef.current
     if (!img || !vp) return
-    const W = vp.clientWidth
-    const H = vp.clientHeight
-    const natW = img.naturalWidth
-    const natH = img.naturalHeight
-    const srcX = Math.max(0, Math.min(natW, (-offsetX) / scale))
-    const srcY = Math.max(0, Math.min(natH, (-offsetY) / scale))
-    const srcW = Math.max(1, Math.min(natW - srcX, W / scale))
-    const srcH = Math.max(1, Math.min(natH - srcY, H / scale))
+    
+    // Output resolution multiplier (4x for higher quality)
+    const outputScale = 4
+    const W = vp.clientWidth * outputScale
+    const H = vp.clientHeight * outputScale
+    
     const canvas = document.createElement('canvas')
     canvas.width = W
     canvas.height = H
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, W, H)
+    
+    // Fill black background
+    ctx.fillStyle = 'black'
+    ctx.fillRect(0, 0, W, H)
+    
+    ctx.save()
+    ctx.translate(offsetX * outputScale, offsetY * outputScale)
+    ctx.scale(scale * outputScale, scale * outputScale)
+    ctx.drawImage(img, 0, 0)
+    ctx.restore()
+    
     canvas.toBlob((blob) => {
       if (blob) onApply(blob)
-    }, 'image/jpeg', 0.92)
+    }, 'image/jpeg', 0.95)
   }
 
   return (
@@ -108,16 +137,23 @@ function CropEditor({ file, preview, onCancel, onApply }: CropEditorProps) {
         <img
           ref={imgRef}
           src={preview}
+          onLoad={handleImageLoad}
           alt=""
-          className="select-none"
-          style={{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`, userSelect: 'none', pointerEvents: 'none' }}
+          className="select-none origin-top-left"
+          style={{ 
+            transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`, 
+            userSelect: 'none', 
+            pointerEvents: 'none',
+            maxWidth: 'none',
+            maxHeight: 'none'
+          }}
         />
       </div>
       <div className="flex items-center gap-4 mb-4">
         <span className="text-white/60 text-sm">Zoom</span>
         <input
           type="range"
-          min={1}
+          min={0.1}
           max={3}
           step={0.01}
           value={scale}
@@ -153,6 +189,14 @@ export type GaleriaItem = {
   categoria: string
 }
 
+export type Album = {
+  id: string
+  slug: string
+  name: string
+  date: string
+  cover_url?: string
+}
+
 type DashboardProps = {
   onLogout: () => void
 }
@@ -161,14 +205,29 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<'shows' | 'galeria'>('shows')
   const [shows, setShows] = useState<Show[]>([])
   
+  // Galeria State
+  const [viewMode, setViewMode] = useState<'albums' | 'photos'>('albums')
+  const [albums, setAlbums] = useState<Album[]>([])
+  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null)
   const [galeria, setGaleria] = useState<GaleriaItem[]>([])
+  const [editingAlbum, setEditingAlbum] = useState<Album | null>(null)
+  const [albumForm, setAlbumForm] = useState<{ name: string; date: string; coverFile: File | null }>({ name: '', date: '', coverFile: null })
+  const [editingPhoto, setEditingPhoto] = useState<GaleriaItem | null>(null)
+  const [photoTitle, setPhotoTitle] = useState<string>('')
+  
   type PendingFile = { file: File; preview: string; name: string; type: 'image' | 'video' }
   const [pendingImages, setPendingImages] = useState<PendingFile[]>([])
   const [pendingVideos, setPendingVideos] = useState<PendingFile[]>([])
+  
+  // Video Upload
+  const [showVideoInitModal, setShowVideoInitModal] = useState(false)
+  const [videoEventName, setVideoEventName] = useState('')
+  const [videoEventDate, setVideoEventDate] = useState('')
   const [showVideoModal, setShowVideoModal] = useState(false)
   const [videoStep, setVideoStep] = useState(0)
   const [videoMeta, setVideoMeta] = useState<{ desc: string; start: number; end: number }[]>([])
   const [videoSaveError, setVideoSaveError] = useState<string | null>(null)
+  
   const [eventName, setEventName] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [showGalleryModal, setShowGalleryModal] = useState(false)
@@ -190,6 +249,29 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [editingShow, setEditingShow] = useState<string | null>(null)
   const [showFormVisible, setShowFormVisible] = useState(false)
 
+  const loadAlbums = async () => {
+    const { data } = await supabase.from('albums').select('*').order('date', { ascending: false })
+    if (data) {
+      setAlbums(data as Album[])
+    }
+  }
+  const loadGallery = async () => {
+    let query = supabase.from('galeria').select('*').order('created_at', { ascending: false })
+    if (selectedAlbum) {
+      query = query.eq('album_slug', selectedAlbum.slug)
+    }
+    const { data: galeriaData } = await query
+    if (galeriaData) {
+      const items: GaleriaItem[] = galeriaData.map((item: any) => ({
+        id: item.storage_path,
+        url: item.url,
+        titulo: item.titulo || item.filename,
+        categoria: item.categoria || 'Eventos'
+      }))
+      setGaleria(items)
+    }
+  }
+
   useEffect(() => {
     const loadShows = async () => {
       const { data } = await supabase
@@ -210,13 +292,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setShows(mapped)
       }
     }
+
+    loadShows()
+    loadAlbums()
+    loadGallery()
+    // Só carregar galeria se estiver em viewMode photos ou para inicializar?
+    // Melhor carregar sob demanda. Mas vou deixar carregar tudo por enquanto se não tiver album selecionado.
+  }, [selectedAlbum]) // Recarregar quando selecionar album
+
+  // Carregar galeria quando mudar selectedAlbum
+  useEffect(() => {
     const loadGallery = async () => {
-      // Carregar imagens da tabela galeria
-      const { data: galeriaData } = await supabase
-        .from('galeria')
-        .select('*')
-        .order('created_at', { ascending: false })
-      
+      let query = supabase.from('galeria').select('*').order('created_at', { ascending: false })
+      if (selectedAlbum) {
+        query = query.eq('album_slug', selectedAlbum.slug)
+      }
+      const { data: galeriaData } = await query
       if (galeriaData) {
         const items: GaleriaItem[] = galeriaData.map((item: any) => ({
           id: item.storage_path,
@@ -227,9 +318,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setGaleria(items)
       }
     }
-    loadShows()
-    loadGallery()
-  }, [])
+    if (viewMode === 'photos') {
+      loadGallery()
+    }
+  }, [viewMode, selectedAlbum])
 
   const handleAddShow = () => {
     if (showForm.nome && showForm.data && showForm.hora) {
@@ -345,11 +437,66 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       .replace(/^-+|-+$/g, '')
 
   const ensureAlbum = async (name: string, date: string) => {
-    const slug = `${date}-${slugify(name)}`
-    await supabase
+    const slug = slugify(`${date}-${name}`)
+    const { data } = await supabase.from('albums').select('slug').eq('slug', slug).maybeSingle()
+    if (data) return data.slug
+
+    const { data: newAlbum } = await supabase
       .from('albums')
-      .upsert({ slug, name, date })
-    return slug
+      .insert({ slug, name, date })
+      .select('slug')
+      .single()
+    
+    loadAlbums()
+    return newAlbum?.slug || slug
+  }
+
+  const handleDeleteAlbum = async (e: React.MouseEvent, album: Album) => {
+    e.stopPropagation()
+    if (!confirm(`Tem certeza que deseja excluir o álbum "${album.name}" e todas as suas fotos?`)) return
+
+    // List files to delete from storage
+    const { data: photos } = await supabase.from('galeria').select('storage_path').eq('album_slug', album.slug)
+    if (photos && photos.length > 0) {
+      const paths = photos.map(p => p.storage_path)
+      await supabase.storage.from('gallery').remove(paths)
+    }
+
+    // Delete album (cascade will delete galeria rows)
+    await supabase.from('albums').delete().eq('id', album.id)
+    loadAlbums()
+    if (selectedAlbum?.id === album.id) {
+      setSelectedAlbum(null)
+      setViewMode('albums')
+    }
+  }
+  const handleEditAlbum = (e: React.MouseEvent, album: Album) => {
+    e.stopPropagation()
+    setEditingAlbum(album)
+    setAlbumForm({ name: album.name, date: album.date, coverFile: null })
+  }
+  const saveAlbumEdits = async () => {
+    if (!editingAlbum) return
+    let coverUrl = editingAlbum.cover_url || null
+    if (albumForm.coverFile) {
+      const name = `cover-${Date.now()}.jpg`
+      const path = `albums/${editingAlbum.slug}/${name}`
+      const up = await supabase.storage.from('gallery').upload(path, albumForm.coverFile, { upsert: true })
+      if (!up.error) {
+        const pub = supabase.storage.from('gallery').getPublicUrl(path)
+        coverUrl = pub.data.publicUrl
+      }
+    }
+    await supabase.from('albums').update({
+      name: albumForm.name,
+      date: albumForm.date,
+      cover_url: coverUrl
+    }).eq('id', editingAlbum.id)
+    await loadAlbums()
+    if (selectedAlbum && selectedAlbum.id === editingAlbum.id) {
+      setSelectedAlbum({ ...selectedAlbum, name: albumForm.name, date: albumForm.date, cover_url: coverUrl || undefined })
+    }
+    setEditingAlbum(null)
   }
 
   const handleFlyerUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -468,7 +615,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           storage_path: path,
           description: meta.desc,
           start_sec: meta.start || null,
-          end_sec: meta.end || null
+          end_sec: meta.end || null,
+          event_name: videoEventName || null,
+          event_date: videoEventDate || null
         })
       if (insertError) {
         const msg = `Não salvou no banco: ${insertError.message}. Se estiver dando 404, rode o reset.sql no Supabase para criar a tabela videos e as políticas.`
@@ -478,6 +627,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
     setPendingVideos([])
     setVideoMeta([])
+    setVideoEventName('')
+    setVideoEventDate('')
   }
 
   const handleDeleteImage = (id: string) => {
@@ -756,36 +907,111 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               transition={{ duration: 0.3 }}
             >
               <div className="mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold text-white">Gerenciar Galeria</h2>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                   <div className="flex items-center gap-3">
+                    {viewMode === 'photos' && (
+                      <button 
+                        onClick={() => {
+                          setViewMode('albums')
+                          setSelectedAlbum(null)
+                        }}
+                        className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10"
+                        title="Voltar para Álbuns"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                      </button>
+                    )}
+                    <h2 className="text-2xl font-bold text-white">
+                      {viewMode === 'albums' ? 'Álbuns da Galeria' : (selectedAlbum ? selectedAlbum.name : 'Galeria')}
+                    </h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                     onClick={() => setShowGalleryModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2 bg-neon-pink text-black rounded-lg hover:bg-neon-pink/90 transition-colors cursor-pointer text-sm font-medium"
                   >
                     <PlusIcon />
                     Adicionar Imagens
                   </button>
-                    <label className="flex items-center gap-2 px-4 py-2 bg-neon-blue text-black rounded-lg hover:bg-neon-blue/90 transition-colors cursor-pointer">
+                    <button
+                      onClick={() => {
+                        setVideoEventName('')
+                        setVideoEventDate('')
+                        setShowVideoInitModal(true)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-neon-blue text-black rounded-lg hover:bg-neon-blue/90 transition-colors cursor-pointer text-sm font-medium"
+                    >
                       <PlusIcon />
                       Adicionar Vídeos
-                      <input
-                        type="file"
-                        multiple
-                        accept="video/*"
-                        onChange={handleVideoUpload}
-                        className="hidden"
-                      />
-                    </label>
+                    </button>
+                    <input
+                      id="video-upload-input"
+                      type="file"
+                      multiple
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      className="hidden"
+                    />
                   </div>
                 </div>
+
+                {/* Lista de Uploads Pendentes (Videos) */}
+                {!!pendingVideos.length && (
+                  <div className="mt-6 mb-8 p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-white/80 font-bold">
+                            Vídeos selecionados {videoEventName ? `para: ${videoEventName}` : ''} 
+                            {videoEventDate ? ` (${new Date(videoEventDate).toLocaleDateString('pt-BR')})` : ''}
+                        </h4>
+                        <button
+                            onClick={() => {
+                                setPendingVideos([])
+                                setVideoEventName('')
+                                setVideoEventDate('')
+                            }}
+                            className="text-red-400 hover:text-red-300 text-sm"
+                        >
+                            Cancelar tudo
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {pendingVideos.map((p, i) => (
+                        <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2 relative group">
+                          <video src={p.preview} className="w-full h-28 object-cover rounded" />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none">
+                              <span className="text-white text-xs font-bold">Aguardando envio</span>
+                          </div>
+                          <p className="mt-2 text-xs text-white truncate">{p.name}</p>
+                          <button
+                            onClick={() => removePendingVideo(i)}
+                            className="mt-2 w-full text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setVideoMeta(pendingVideos.map(() => ({ desc: '', start: 0, end: 0 })))
+                        setVideoStep(0)
+                        setVideoSaveError(null)
+                        setShowVideoModal(true)
+                      }}
+                      className="mt-3 px-4 py-2 rounded bg-neon-pink text-black hover:bg-neon-pink/90 font-medium"
+                    >
+                      Preparar e Enviar {pendingVideos.length} vídeos
+                    </button>
+                  </div>
+                )}
+                
                 {!!pendingImages.length && (
-                  <div className="mt-6">
-                    <h4 className="text-white/80 mb-2">Imagens selecionadas</h4>
+                  <div className="mt-6 p-4 bg-white/5 rounded-lg border border-white/10">
+                    <h4 className="text-white/80 mb-2 font-bold">Imagens selecionadas</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {pendingImages.map((p, i) => (
                         <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
-                          <img src={p.preview} alt="" className="w-full h-28 object-cover rounded" />
+                          <img src={p.preview} alt="" className="w-full h-28 object-contain bg-black rounded" />
                           <input
                             type="text"
                             value={p.name}
@@ -806,81 +1032,106 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     </div>
                     <button
                       onClick={confirmUploadImages}
-                      className="mt-3 px-4 py-2 rounded bg-neon-green text-black hover:bg-neon-green/90"
+                      className="mt-3 px-4 py-2 rounded bg-neon-green text-black hover:bg-neon-green/90 font-medium"
                     >
                       Enviar {pendingImages.length} imagens
                     </button>
                   </div>
                 )}
-                {!!pendingVideos.length && (
-                  <div className="mt-6">
-                    <h4 className="text-white/80 mb-2">Vídeos selecionados</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {pendingVideos.map((p, i) => (
-                        <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
-                          <video src={p.preview} className="w-full h-28 object-cover rounded" />
-                          <input
-                            type="text"
-                            value={p.name}
-                            onChange={(e) => {
-                              const val = e.target.value
-                              setPendingVideos(prev => prev.map((x, idx) => idx === i ? { ...x, name: val } : x))
-                            }}
-                            className="mt-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
-                          />
-                          <button
-                            onClick={() => removePendingVideo(i)}
-                            className="mt-2 w-full text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setVideoMeta(pendingVideos.map(() => ({ desc: '', start: 0, end: 0 })))
-                        setVideoStep(0)
-                        setVideoSaveError(null)
-                        setShowVideoModal(true)
-                      }}
-                      className="mt-3 px-4 py-2 rounded bg-neon-pink text-black hover:bg-neon-pink/90"
-                    >
-                      Enviar {pendingVideos.length} vídeos
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {/* Grid de Imagens */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {galeria.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    layout
-                    className="relative group bg-white/5 rounded-lg overflow-hidden border border-white/10"
-                  >
-                    <img
-                      src={item.url}
-                      alt={item.titulo}
-                      className="w-full h-48 object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button
-                        onClick={() => handleDeleteImage(item.id)}
-                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                        title="Excluir imagem"
+              {/* View Mode: Albums */}
+              {viewMode === 'albums' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {albums.map((album) => (
+                    <motion.div
+                      key={album.id}
+                      layout
+                      onClick={() => {
+                        setSelectedAlbum(album)
+                        setViewMode('photos')
+                      }}
+                      className="cursor-pointer group bg-white/5 rounded-lg overflow-hidden border border-white/10 hover:border-neon-pink/50 transition-all hover:shadow-[0_0_15px_rgba(255,0,128,0.3)]"
+                    >
+                      <div className="h-40 bg-gray-900 flex items-center justify-center text-white/20 relative">
+                         <button
+                           onClick={(e) => handleEditAlbum(e, album)}
+                           className="absolute top-2 left-2 p-2 bg-white/20 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-white/30"
+                           title="Editar álbum"
+                         >
+                           <EditIcon />
+                         </button>
+                         <button
+                            onClick={(e) => handleDeleteAlbum(e, album)}
+                            className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-red-600"
+                            title="Excluir álbum"
+                         >
+                            <TrashIcon />
+                         </button>
+                         {album.cover_url && (
+                           <img src={album.cover_url} alt={album.name} className="absolute inset-0 w-full h-full object-cover" />
+                         )}
+                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-4">
+                            <span className="text-white font-bold truncate text-lg">{album.name}</span>
+                            <span className="text-white/60 text-sm">{new Date(album.date).toLocaleDateString('pt-BR')}</span>
+                         </div>
+                         {/* Icone de pasta */}
+                         {!album.cover_url && <svg className="w-16 h-16 text-white/10 group-hover:text-white/20 transition-colors mb-6" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>}
+                      </div>
+                    </motion.div>
+                  ))}
+                  {albums.length === 0 && (
+                     <div className="col-span-full text-center py-12 text-white/40 border-2 border-dashed border-white/10 rounded-lg">
+                        <p className="text-lg">Nenhum álbum encontrado.</p>
+                        <p className="text-sm">Adicione imagens para criar álbuns automaticamente.</p>
+                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* View Mode: Photos */}
+              {viewMode === 'photos' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {galeria.map((item) => (
+                      <motion.div
+                        key={item.id}
+                        layout
+                        className="relative group bg-white/5 rounded-lg overflow-hidden border border-white/10 hover:border-neon-green/50 transition-all"
                       >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                    <div className="p-3">
-                      <h4 className="text-white font-medium">{item.titulo}</h4>
-                      <p className="text-white/60 text-sm">{item.categoria}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+                        <img
+                          src={item.url}
+                          alt={item.titulo}
+                          className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => setEditingPhoto(item)}
+                            className="p-2 bg-white/20 text-white rounded-full hover:bg-white/30 transition-colors transform hover:scale-110"
+                            title="Editar imagem"
+                          >
+                            <EditIcon />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteImage(item.id)}
+                            className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors transform hover:scale-110"
+                            title="Excluir imagem"
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
+                        <div className="p-3 bg-black/40 backdrop-blur-sm absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0 transition-transform">
+                          <h4 className="text-white font-medium truncate text-sm">{item.titulo}</h4>
+                          <p className="text-white/60 text-xs">{item.categoria}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                     {galeria.length === 0 && (
+                        <div className="col-span-full text-center py-12 text-white/40 border-2 border-dashed border-white/10 rounded-lg">
+                            <p>Nenhuma foto neste álbum.</p>
+                        </div>
+                     )}
+                  </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -967,7 +1218,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
                       {pendingImages.map((p, i) => (
                         <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
-                          <img src={p.preview} alt="" className="w-full h-24 object-cover rounded" />
+                          <img src={p.preview} alt="" className="w-full h-24 object-contain bg-black rounded" />
                           <input
                             type="text"
                             value={p.name}
@@ -1007,8 +1258,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   </button>
                   <button
                     onClick={confirmUploadImages}
-                    disabled={!pendingImages.length || !eventName || !eventDate}
-                    className="px-4 py-2 rounded-lg bg-neon-green text-black hover:bg-neon-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!pendingImages.length}
+                  className="px-4 py-2 rounded-lg bg-neon-green text-black hover:bg-neon-green/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Salvar Imagens
                   </button>
@@ -1018,6 +1269,73 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           )}
         </AnimatePresence>
       </div>
+        <AnimatePresence>
+          {editingAlbum && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+              onClick={() => setEditingAlbum(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-gray-900 rounded-lg p-6 max-w-xl w-full border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-xl font-bold text-white mb-4">Editar Álbum</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Nome</label>
+                    <input
+                      type="text"
+                      value={albumForm.name}
+                      onChange={(e) => setAlbumForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Data</label>
+                    <input
+                      type="date"
+                      value={albumForm.date}
+                      onChange={(e) => setAlbumForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-white/60 mb-1">Capa do Álbum</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const f = e.target.files && e.target.files[0]
+                        setAlbumForm(prev => ({ ...prev, coverFile: f || null }))
+                      }}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    onClick={() => setEditingAlbum(null)}
+                    className="px-4 py-2 rounded-lg border border-white/20 text-white hover:bg-white/5 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={saveAlbumEdits}
+                    className="px-4 py-2 rounded-lg bg-neon-green text-black hover:bg-neon-green/90 transition-colors"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <AnimatePresence>
           {editingImageIndex !== null && (
             <motion.div
@@ -1047,6 +1365,55 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     setEditingImageIndex(null)
                   }}
                 />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {editingPhoto && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+              onClick={() => setEditingPhoto(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-gray-900 rounded-lg p-6 max-w-md w-full border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-xl font-bold text-white mb-4">Editar Imagem</h3>
+                <div>
+                  <label className="block text-sm text-white/60 mb-1">Título</label>
+                  <input
+                    type="text"
+                    value={photoTitle}
+                    onChange={(e) => setPhotoTitle(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                  />
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    onClick={() => setEditingPhoto(null)}
+                    className="px-4 py-2 rounded-lg border border-white/20 text-white hover:bg-white/5 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!editingPhoto) return
+                      await supabase.from('galeria').update({ titulo: photoTitle }).eq('storage_path', editingPhoto.id)
+                      await loadGallery()
+                      setEditingPhoto(null)
+                    }}
+                    className="px-4 py-2 rounded-lg bg-neon-green text-black hover:bg-neon-green/90 transition-colors"
+                  >
+                    Salvar
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}
@@ -1184,9 +1551,89 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   </div>
                 </div>
               </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Inicial de Vídeo (Evento e Data) */}
+      <AnimatePresence>
+        {showVideoInitModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md bg-[#1a1a1a] rounded-xl border border-white/10 p-6 shadow-2xl relative"
+            >
+              <button
+                onClick={() => setShowVideoInitModal(false)}
+                className="absolute top-4 right-4 text-white/40 hover:text-white"
+              >
+                <XIcon />
+              </button>
+              
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <span className="p-2 rounded-lg bg-neon-blue/20 text-neon-blue">
+                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </span>
+                Adicionar Vídeos
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-1">
+                    Nome do Evento
+                  </label>
+                  <input
+                    type="text"
+                    value={videoEventName}
+                    onChange={(e) => setVideoEventName(e.target.value)}
+                    placeholder="Ex: Culto de Jovens"
+                    className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-blue/50"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-1">
+                    Data do Evento
+                  </label>
+                  <input
+                    type="date"
+                    value={videoEventDate}
+                    onChange={(e) => setVideoEventDate(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-blue/50"
+                  />
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowVideoInitModal(false)}
+                    className="px-4 py-2 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={!videoEventName || !videoEventDate}
+                    onClick={() => {
+                      setShowVideoInitModal(false)
+                      document.getElementById('video-upload-input')?.click()
+                    }}
+                    className="px-6 py-2 rounded-lg bg-neon-blue text-black font-medium hover:bg-neon-blue/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    Continuar
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                  </button>
+                </div>
+              </div>
             </motion.div>
-          )}
-        </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

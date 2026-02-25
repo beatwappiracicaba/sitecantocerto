@@ -49,6 +49,7 @@ create table public.albums (
   slug text unique not null,
   name text not null,
   date date not null,
+  cover_url text,
   created_at timestamp with time zone default now()
 );
 
@@ -73,6 +74,8 @@ create table public.videos (
   description text,
   start_sec integer,
   end_sec integer,
+  event_name text,
+  event_date date,
   created_at timestamp with time zone default now()
 );
 
