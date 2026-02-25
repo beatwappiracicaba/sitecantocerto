@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       .from('profiles')
       .select('name, cargo, role, email')
       .eq('id', u.id)
-      .single()
+      .maybeSingle()
     if (error || !profileData) {
       await supabase
         .from('profiles')

@@ -168,6 +168,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [showVideoModal, setShowVideoModal] = useState(false)
   const [videoStep, setVideoStep] = useState(0)
   const [videoMeta, setVideoMeta] = useState<{ desc: string; start: number; end: number }[]>([])
+  const [videoSaveError, setVideoSaveError] = useState<string | null>(null)
   const [eventName, setEventName] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [showGalleryModal, setShowGalleryModal] = useState(false)
@@ -456,9 +457,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       const safeName = item.name.replace(/\s+/g, '-')
       const path = `videos/${Date.now()}-${safeName}`
       const up = await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
-      if (!up.error) {
-        const pub = supabase.storage.from('gallery').getPublicUrl(path)
-        await supabase.from('videos').insert({
+      if (up.error) {
+        setVideoSaveError(up.error.message)
+        return
+      }
+      const pub = supabase.storage.from('gallery').getPublicUrl(path)
+      const { error: insertError } = await supabase.from('videos').insert({
           filename: safeName,
           url: pub.data.publicUrl,
           storage_path: path,
@@ -466,9 +470,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           start_sec: meta.start || null,
           end_sec: meta.end || null
         })
+      if (insertError) {
+        const msg = `Não salvou no banco: ${insertError.message}. Se estiver dando 404, rode o reset.sql no Supabase para criar a tabela videos e as políticas.`
+        setVideoSaveError(msg)
+        return
       }
     }
     setPendingVideos([])
+    setVideoMeta([])
   }
 
   const handleDeleteImage = (id: string) => {
@@ -832,6 +841,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                       onClick={() => {
                         setVideoMeta(pendingVideos.map(() => ({ desc: '', start: 0, end: 0 })))
                         setVideoStep(0)
+                        setVideoSaveError(null)
                         setShowVideoModal(true)
                       }}
                       className="mt-3 px-4 py-2 rounded bg-neon-pink text-black hover:bg-neon-pink/90"
@@ -1058,6 +1068,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-xl font-bold text-white mb-4">Preparar Vídeo</h3>
+                {!!videoSaveError && (
+                  <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {videoSaveError}
+                  </div>
+                )}
                 <div className="relative rounded-2xl p-1 bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500">
                   <div className="rounded-xl bg-black">
                     <video

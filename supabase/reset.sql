@@ -12,6 +12,7 @@ drop policy if exists "update gallery" on storage.objects;
 drop policy if exists "delete gallery" on storage.objects;
 
 -- Dropar tabelas (se existirem)
+drop table if exists public.albums cascade;
 drop table if exists public.shows cascade;
 drop table if exists public.profiles cascade;
 drop table if exists public.galeria cascade;
