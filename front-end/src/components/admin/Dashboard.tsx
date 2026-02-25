@@ -936,13 +936,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   >
                     Arraste e solte as fotos aqui
                   </div>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-neon-green/60"
-                  />
+                  <label className="inline-flex items-center gap-2 px-4 py-2 bg-neon-green text-black rounded-lg hover:bg-neon-green/90 transition-colors cursor-pointer">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Selecionar Imagens
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
 
                 {!!pendingImages.length && (

@@ -117,9 +117,16 @@ export default function Galeria() {
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.6 }}
+                transition={{ delay: i * 0.1, duration: 0.6, boxShadow: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } }}
                 className="group relative overflow-hidden rounded-3xl p-1 text-left"
                 style={{ backgroundImage: 'linear-gradient(90deg,#fde047,#facc15,#fde047)', boxShadow: '0 0 16px rgba(250, 204, 21, 0.5)' }}
+                animate={{
+                  boxShadow: [
+                    '0 0 12px rgba(250, 204, 21, 0.35)',
+                    '0 0 20px rgba(250, 204, 21, 0.6)',
+                    '0 0 12px rgba(250, 204, 21, 0.35)'
+                  ]
+                }}
               >
                 <div className="rounded-[20px] bg-white/[0.02] p-6 hover:bg-white/[0.06] transition-colors">
                 <div className="text-neon-blue font-bold tracking-wider text-sm uppercase mb-2">
@@ -152,9 +159,16 @@ export default function Galeria() {
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.6 }}
+                transition={{ delay: i * 0.1, duration: 0.6, boxShadow: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } }}
                 className="relative overflow-hidden rounded-3xl bg-black/40 p-1"
                 style={{ backgroundImage: 'linear-gradient(90deg,#fde047,#facc15,#fde047)', boxShadow: '0 0 16px rgba(250, 204, 21, 0.5)' }}
+                animate={{
+                  boxShadow: [
+                    '0 0 12px rgba(250, 204, 21, 0.35)',
+                    '0 0 20px rgba(250, 204, 21, 0.6)',
+                    '0 0 12px rgba(250, 204, 21, 0.35)'
+                  ]
+                }}
               >
                 <div className="rounded-3xl bg-black">
                   <video
@@ -198,9 +212,16 @@ export default function Galeria() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.05, duration: 0.5 }}
+                transition={{ delay: i * 0.05, duration: 0.5, boxShadow: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } }}
                 className="group relative aspect-[4/3] overflow-hidden rounded-3xl p-1"
                 style={{ backgroundImage: 'linear-gradient(90deg,#fde047,#facc15,#fde047)', boxShadow: '0 0 16px rgba(250, 204, 21, 0.5)' }}
+                animate={{
+                  boxShadow: [
+                    '0 0 12px rgba(250, 204, 21, 0.35)',
+                    '0 0 20px rgba(250, 204, 21, 0.6)',
+                    '0 0 12px rgba(250, 204, 21, 0.35)'
+                  ]
+                }}
               >
                 <div className="absolute inset-0 rounded-[22px] bg-black" />
                 <div className="relative inset-0 w-full h-full rounded-[22px] overflow-hidden">

@@ -36,12 +36,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   useEffect(() => {
     const init = async () => {
-      const { data } = await supabase.auth.getUser()
-      const u = data.user
-      if (u) {
-        await syncProfile(u)
+      try {
+        const { data } = await supabase.auth.getUser()
+        const u = data.user
+        if (u) {
+          await syncProfile(u)
+        }
+      } catch {
+      } finally {
+        setIsLoading(false)
       }
-      setIsLoading(false)
     }
     init()
     const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: any) => {
