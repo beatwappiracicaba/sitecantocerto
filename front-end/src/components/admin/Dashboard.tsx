@@ -63,6 +63,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [shows, setShows] = useState<Show[]>([])
   
   const [galeria, setGaleria] = useState<GaleriaItem[]>([])
+  type PendingFile = { file: File; preview: string; name: string; type: 'image' | 'video' }
+  const [pendingImages, setPendingImages] = useState<PendingFile[]>([])
+  const [pendingVideos, setPendingVideos] = useState<PendingFile[]>([])
   const [eventName, setEventName] = useState('')
   const [eventDate, setEventDate] = useState('')
   
@@ -256,33 +259,64 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (files) {
-      Array.from(files).forEach(async file => {
-        const albumSlug = (eventName && eventDate) ? await ensureAlbum(eventName, eventDate) : ''
-        const basePath = albumSlug ? `events/${albumSlug}` : ''
-        const path = basePath ? `${basePath}/${Date.now()}-${file.name}` : `${Date.now()}-${file.name}`
-        const up = await supabase.storage.from('gallery').upload(path, file, { upsert: true })
-        if (!up.error) {
-          const pub = supabase.storage.from('gallery').getPublicUrl(path)
-          const newItem: GaleriaItem = {
-            id: path,
-            url: pub.data.publicUrl,
-            titulo: albumSlug ? `${eventName}` : file.name.split('.')[0],
-            categoria: albumSlug ? `Evento • ${eventDate}` : 'Eventos'
-          }
-          setGaleria(prev => [...prev, newItem])
-        }
-      })
+      const staged = Array.from(files).map(file => ({
+        file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+        type: 'image' as const
+      }))
+      setPendingImages(prev => [...prev, ...staged])
     }
   }
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files) {
-      for (const file of Array.from(files)) {
-        const path = `videos/${Date.now()}-${file.name}`
-        await supabase.storage.from('gallery').upload(path, file, { upsert: true })
+      const staged = Array.from(files).map(file => ({
+        file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+        type: 'video' as const
+      }))
+      setPendingVideos(prev => [...prev, ...staged])
+    }
+  }
+
+  const removePendingImage = (i: number) => {
+    setPendingImages(prev => prev.filter((_, idx) => idx !== i))
+  }
+  const removePendingVideo = (i: number) => {
+    setPendingVideos(prev => prev.filter((_, idx) => idx !== i))
+  }
+
+  const confirmUploadImages = async () => {
+    const albumSlug = (eventName && eventDate) ? await ensureAlbum(eventName, eventDate) : ''
+    const basePath = albumSlug ? `events/${albumSlug}` : ''
+    for (const item of pendingImages) {
+      const safeName = item.name.replace(/\s+/g, '-')
+      const path = basePath ? `${basePath}/${Date.now()}-${safeName}` : `${Date.now()}-${safeName}`
+      const up = await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
+      if (!up.error) {
+        const pub = supabase.storage.from('gallery').getPublicUrl(path)
+        const newItem: GaleriaItem = {
+          id: path,
+          url: pub.data.publicUrl,
+          titulo: albumSlug ? `${eventName}` : safeName.split('.')[0],
+          categoria: albumSlug ? `Evento • ${eventDate}` : 'Eventos'
+        }
+        setGaleria(prev => [...prev, newItem])
       }
     }
+    setPendingImages([])
+  }
+
+  const confirmUploadVideos = async () => {
+    for (const item of pendingVideos) {
+      const safeName = item.name.replace(/\s+/g, '-')
+      const path = `videos/${Date.now()}-${safeName}`
+      await supabase.storage.from('gallery').upload(path, item.file, { upsert: true })
+    }
+    setPendingVideos([])
   }
 
   const handleDeleteImage = (id: string) => {
@@ -603,6 +637,72 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     />
                   </div>
                 </div>
+                {!!pendingImages.length && (
+                  <div className="mt-6">
+                    <h4 className="text-white/80 mb-2">Imagens selecionadas</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {pendingImages.map((p, i) => (
+                        <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
+                          <img src={p.preview} alt="" className="w-full h-28 object-cover rounded" />
+                          <input
+                            type="text"
+                            value={p.name}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setPendingImages(prev => prev.map((x, idx) => idx === i ? { ...x, name: val } : x))
+                            }}
+                            className="mt-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+                          />
+                          <button
+                            onClick={() => removePendingImage(i)}
+                            className="mt-2 w-full text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={confirmUploadImages}
+                      className="mt-3 px-4 py-2 rounded bg-neon-green text-black hover:bg-neon-green/90"
+                    >
+                      Enviar {pendingImages.length} imagens
+                    </button>
+                  </div>
+                )}
+                {!!pendingVideos.length && (
+                  <div className="mt-6">
+                    <h4 className="text-white/80 mb-2">Vídeos selecionados</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {pendingVideos.map((p, i) => (
+                        <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
+                          <video src={p.preview} className="w-full h-28 object-cover rounded" />
+                          <input
+                            type="text"
+                            value={p.name}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setPendingVideos(prev => prev.map((x, idx) => idx === i ? { ...x, name: val } : x))
+                            }}
+                            className="mt-2 w-full rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white"
+                          />
+                          <button
+                            onClick={() => removePendingVideo(i)}
+                            className="mt-2 w-full text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={confirmUploadVideos}
+                      className="mt-3 px-4 py-2 rounded bg-neon-pink text-black hover:bg-neon-pink/90"
+                    >
+                      Enviar {pendingVideos.length} vídeos
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Grid de Imagens */}
