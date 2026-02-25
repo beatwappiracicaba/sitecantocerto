@@ -95,7 +95,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     const loadGallery = async () => {
       const list = await supabase.storage.from('gallery').list('', { limit: 100 })
       const files = list.data || []
-      const items: GaleriaItem[] = files.map(f => {
+      const items: GaleriaItem[] = files.map((f: { name: string }) => {
         const pub = supabase.storage.from('gallery').getPublicUrl(f.name)
         return {
           id: f.name,
