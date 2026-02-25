@@ -560,7 +560,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }
 
   const confirmUploadImages = async () => {
-    const albumSlug = (eventName && eventDate) ? await ensureAlbum(eventName, eventDate) : ''
+    const albumSlug = (eventName && eventDate) ? await ensureAlbum(eventName, eventDate) : null
     const basePath = albumSlug ? `events/${albumSlug}` : ''
     
     for (const item of pendingImages) {

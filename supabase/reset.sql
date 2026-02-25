@@ -56,7 +56,7 @@ create table public.albums (
 -- Criar tabela de galeria para salvar fotos
 create table public.galeria (
   id uuid primary key default gen_random_uuid(),
-  album_slug text not null references public.albums(slug) on delete cascade,
+  album_slug text references public.albums(slug) on delete cascade,
   filename text not null,
   titulo text,
   categoria text,

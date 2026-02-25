@@ -28,6 +28,30 @@ export default function Galeria() {
   const [albumPhotos, setAlbumPhotos] = useState<PhotoItem[]>([])
   const [videos, setVideos] = useState<VideoItem[]>([])
 
+  const downloadImage = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      
+      const urlParts = url.split('/')
+      const originalName = urlParts[urlParts.length - 1]
+      const nameWithoutExtension = originalName.split('.')[0]
+      
+      const jpgBlob = blob.type === 'image/jpeg' ? blob : new Blob([blob], { type: 'image/jpeg' })
+      
+      const downloadUrl = URL.createObjectURL(jpgBlob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = `${nameWithoutExtension}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error('Erro ao baixar imagem:', error)
+    }
+  }
+
   useEffect(() => {
     const loadAlbums = async () => {
       const { data } = await supabase
@@ -174,7 +198,7 @@ export default function Galeria() {
                   <video
                     src={v.url}
                     controls
-                    className="w-full h-full rounded-3xl"
+                    className="w-full h-full rounded-3xl max-h-[80vh] object-contain"
                     onLoadedMetadata={(e) => {
                       const el = e.currentTarget as HTMLVideoElement
                       if (typeof v.start_sec === 'number') el.currentTime = v.start_sec
@@ -227,13 +251,12 @@ export default function Galeria() {
                 <div className="relative inset-0 w-full h-full rounded-[22px] overflow-hidden">
                   <img src={p.url} alt="" className="absolute inset-0 w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <a
-                      href={`${p.url}?download=true`}
-                      className="rounded-full border border-yellow-400 bg-black/40 backdrop-blur-md px-6 py-2 text-yellow-300 font-medium tracking-wide"
-                      download
+                    <button
+                      onClick={() => downloadImage(p.url, p.id)}
+                      className="rounded-full border border-yellow-400 bg-black/40 backdrop-blur-md px-6 py-2 text-yellow-300 font-medium tracking-wide hover:bg-black/60 transition-colors"
                     >
                       Baixar
-                    </a>
+                    </button>
                   </div>
                 </div>
               </motion.div>
