@@ -22,11 +22,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
       select: (columns = '*') => ({
         eq: (column: string, value: any) => ({
           order: (column: string, options: any = {}) => ({
+            order: (column2: string, options2: any = {}) => ({
+              data: [],
+              error: null
+            }),
             data: [],
             error: null
           })
         }),
         order: (column: string, options: any = {}) => ({
+          order: (column2: string, options2: any = {}) => ({
+            data: [],
+            error: null
+          }),
           data: [],
           error: null
         })
@@ -53,8 +61,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
           error: null
         }),
         getPublicUrl: (path: string) => ({
-          data: { 
-            publicUrl: `https://via.placeholder.com/800x600/4F46E5/FFFFFF?text=Mock+Image+${Math.floor(Math.random() * 100)}` 
+          data: {
+            publicUrl: '/images/casadeshow.png'
           }
         })
       })
