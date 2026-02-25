@@ -21,7 +21,7 @@ export default function Header({ onOpenLogin }: HeaderProps) {
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-black/80 backdrop-blur-md py-3 shadow-lg border-b border-white/5' : 'py-6'}`}>
-      <div className="mx-auto max-w-6xl px-6 flex items-center justify-between">
+      <div className="mx-auto max-w-6xl px-6 flex items-center justify-between gap-4">
         <button onClick={scrollTop} className="flex items-center group" aria-label="Canto Certo - Início">
           <img
             src={scrolled ? '/images/CANTOBRANCO.png' : '/images/CANTOAMARELO.png'}
@@ -32,19 +32,27 @@ export default function Header({ onOpenLogin }: HeaderProps) {
             loading="eager"
           />
         </button>
-        <nav className="hidden md:flex items-center gap-8">
-          <a href="#agenda" className="text-white/70 hover:text-neon-green transition-colors font-medium">Agenda</a>
-          <a href="#galeria" className="text-white/70 hover:text-neon-pink transition-colors font-medium">Galeria</a>
-          <a href="#contato" className="shine inline-flex items-center rounded-full border border-white/10 bg-white/5 px-6 py-2 text-sm font-semibold hover:bg-white/10 hover:border-white/20 transition-all hover:scale-105">
-            Reservar Mesa
-          </a>
+        <div className="flex items-center gap-4">
           <button
             onClick={onOpenLogin}
-            className="text-white/70 hover:text-neon-green transition-colors font-medium"
+            className="md:hidden inline-flex items-center rounded-full border border-white/20 bg-black/40 px-4 py-1.5 text-xs font-semibold text-white/80 backdrop-blur-sm hover:bg-white/10 hover:text-neon-green transition-colors"
           >
             Entrar
           </button>
-        </nav>
+          <nav className="hidden md:flex items-center gap-8">
+            <a href="#agenda" className="text-white/70 hover:text-neon-green transition-colors font-medium">Agenda</a>
+            <a href="#galeria" className="text-white/70 hover:text-neon-pink transition-colors font-medium">Galeria</a>
+            <a href="#contato" className="shine inline-flex items-center rounded-full border border-white/10 bg-white/5 px-6 py-2 text-sm font-semibold hover:bg-white/10 hover:border-white/20 transition-all hover:scale-105">
+              Reservar Mesa
+            </a>
+            <button
+              onClick={onOpenLogin}
+              className="text-white/70 hover:text-neon-green transition-colors font-medium"
+            >
+              Entrar
+            </button>
+          </nav>
+        </div>
       </div>
     </header>
   )
