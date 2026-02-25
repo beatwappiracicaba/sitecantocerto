@@ -5,12 +5,7 @@
 -- Extensões necessárias
 create extension if not exists pgcrypto;
 
--- Remover políticas antigas
-drop policy if exists "shows_read_all" on public.shows;
-drop policy if exists "shows_manage_auth" on public.shows;
-drop policy if exists "profiles_select_public" on public.profiles;
-drop policy if exists "profiles_upsert_authenticated" on public.profiles;
-drop policy if exists "profiles_update_authenticated" on public.profiles;
+-- Remover políticas antigas apenas de storage.objects (sempre existe)
 drop policy if exists "read gallery" on storage.objects;
 drop policy if exists "insert gallery" on storage.objects;
 drop policy if exists "update gallery" on storage.objects;
