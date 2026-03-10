@@ -187,6 +187,7 @@ export type GaleriaItem = {
   url: string
   titulo: string
   categoria: string
+  type: 'image' | 'video'
 }
 
 export type Album = {
@@ -300,23 +301,47 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     // Melhor carregar sob demanda. Mas vou deixar carregar tudo por enquanto se não tiver album selecionado.
   }, [selectedAlbum]) // Recarregar quando selecionar album
 
-  // Carregar galeria quando mudar selectedAlbum
+  // Carregar galeria (fotos e vídeos) quando mudar selectedAlbum ou viewMode
   useEffect(() => {
     const loadGallery = async () => {
-      let query = supabase.from('galeria').select('*').order('created_at', { ascending: false })
+      // 1. Fetch Images
+      let imgQuery = supabase.from('galeria').select('*').order('created_at', { ascending: false })
       if (selectedAlbum) {
-        query = query.eq('album_slug', selectedAlbum.slug)
+        imgQuery = imgQuery.eq('album_slug', selectedAlbum.slug)
       }
-      const { data: galeriaData } = await query
-      if (galeriaData) {
-        const items: GaleriaItem[] = galeriaData.map((item: any) => ({
+      const { data: imgData } = await imgQuery
+
+      // 2. Fetch Videos
+      const { data: videoData } = await supabase.from('videos').select('*').order('created_at', { ascending: false })
+
+      let items: GaleriaItem[] = []
+      
+      if (imgData) {
+        items = items.concat(imgData.map((item: any) => ({
           id: item.storage_path,
           url: item.url,
           titulo: item.titulo || item.filename,
-          categoria: item.categoria || 'Eventos'
-        }))
-        setGaleria(items)
+          categoria: item.categoria || 'Eventos',
+          type: 'image'
+        })))
       }
+
+      if (videoData) {
+        // Se tem álbum selecionado, filtra vídeos do mesmo evento
+        const relevantVideos = selectedAlbum 
+          ? videoData.filter((v: any) => v.event_name === selectedAlbum.name)
+          : videoData
+          
+        items = items.concat(relevantVideos.map((item: any) => ({
+          id: item.storage_path,
+          url: item.url,
+          titulo: item.description || item.filename,
+          categoria: 'Vídeo',
+          type: 'video'
+        })))
+      }
+      
+      setGaleria(items)
     }
     if (viewMode === 'photos') {
       loadGallery()
@@ -631,16 +656,24 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setVideoEventDate('')
   }
 
-  const handleDeleteImage = (id: string) => {
+  const handleDeleteItem = (item: GaleriaItem) => {
+    if (!confirm('Tem certeza que deseja excluir este item?')) return
+
     const rem = async () => {
       // Remover do storage
-      await supabase.storage.from('gallery').remove([id])
+      await supabase.storage.from('gallery').remove([item.id])
       
-      // Remover da tabela galeria
-      await supabase.from('galeria').delete().eq('storage_path', id)
+      // Remover da tabela correta
+      if (item.type === 'video') {
+        const { error } = await supabase.from('videos').delete().eq('storage_path', item.id)
+        if (error) alert('Erro ao remover vídeo: ' + error.message)
+      } else {
+        const { error } = await supabase.from('galeria').delete().eq('storage_path', item.id)
+        if (error) alert('Erro ao remover imagem: ' + error.message)
+      }
       
       // Atualizar estado local
-      setGaleria(galeria.filter(item => item.id !== id))
+      setGaleria(prev => prev.filter(i => i.id !== item.id))
     }
     rem()
   }
@@ -1098,28 +1131,45 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                         layout
                         className="relative group bg-white/5 rounded-lg overflow-hidden border border-white/10 hover:border-neon-green/50 transition-all"
                       >
-                        <img
-                          src={item.url}
-                          alt={item.titulo}
-                          className="w-full h-48 object-cover transition-transform group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => setEditingPhoto(item)}
-                            className="p-2 bg-white/20 text-white rounded-full hover:bg-white/30 transition-colors transform hover:scale-110"
-                            title="Editar imagem"
-                          >
-                            <EditIcon />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteImage(item.id)}
-                            className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors transform hover:scale-110"
-                            title="Excluir imagem"
-                          >
-                            <TrashIcon />
-                          </button>
+                        {item.type === 'video' ? (
+                          <div className="relative w-full h-48 bg-black">
+                            <video
+                              src={item.url}
+                              controls
+                              className="w-full h-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <img
+                            src={item.url}
+                            alt={item.titulo}
+                            className="w-full h-48 object-cover transition-transform group-hover:scale-105"
+                          />
+                        )}
+                        
+                        {/* Overlay with actions - pointer-events-none to allow video interaction unless hovering buttons */}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
+                          <div className="pointer-events-auto flex gap-2">
+                            {item.type === 'image' && (
+                              <button
+                                onClick={() => setEditingPhoto(item)}
+                                className="p-2 bg-white/20 text-white rounded-full hover:bg-white/30 transition-colors transform hover:scale-110"
+                                title="Editar imagem"
+                              >
+                                <EditIcon />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteItem(item)}
+                              className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors transform hover:scale-110"
+                              title="Excluir item"
+                            >
+                              <TrashIcon />
+                            </button>
+                          </div>
                         </div>
-                        <div className="p-3 bg-black/40 backdrop-blur-sm absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0 transition-transform">
+                        
+                        <div className="p-3 bg-black/40 backdrop-blur-sm absolute bottom-0 left-0 right-0 translate-y-full group-hover:translate-y-0 transition-transform pointer-events-none">
                           <h4 className="text-white font-medium truncate text-sm">{item.titulo}</h4>
                           <p className="text-white/60 text-xs">{item.categoria}</p>
                         </div>
@@ -1127,7 +1177,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     ))}
                      {galeria.length === 0 && (
                         <div className="col-span-full text-center py-12 text-white/40 border-2 border-dashed border-white/10 rounded-lg">
-                            <p>Nenhuma foto neste álbum.</p>
+                            <p>Nenhuma foto ou vídeo neste álbum.</p>
                         </div>
                      )}
                   </div>
