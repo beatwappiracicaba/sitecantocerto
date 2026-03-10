@@ -1431,7 +1431,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-gray-900 rounded-lg p-6 max-w-3xl w-full border border-white/10"
+                className="bg-gray-900 rounded-lg p-6 max-w-3xl w-full border border-white/10 max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-xl font-bold text-white mb-4">Preparar Vídeo</h3>
@@ -1444,7 +1444,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   <div className="rounded-xl bg-black">
                     <video
                       src={pendingVideos[videoStep].preview}
-                      className="w-full rounded-xl"
+                      className="w-full max-h-[50vh] object-contain rounded-xl"
                       controls
                       onLoadedMetadata={(e) => {
                         const dur = (e.currentTarget as HTMLVideoElement).duration
