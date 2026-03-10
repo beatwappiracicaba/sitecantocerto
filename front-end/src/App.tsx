@@ -7,7 +7,6 @@ import Hero from '@/components/shared/Hero'
 import Agenda from '@/components/shared/Agenda'
 import Galeria from '@/components/shared/Galeria'
 import Footer from '@/components/layout/Footer'
-import CursorEffect from '@/components/shared/CursorEffect'
 import SectionSnap from '@/components/shared/SectionSnap'
 import Dashboard from '@/components/admin/Dashboard'
 
@@ -100,7 +99,6 @@ function AppContent() {
   return (
     <>
       <Preloader />
-      <CursorEffect />
       <LoginPanel open={loginOpen} onClose={() => setLoginOpen(false)} />
       <div className="fixed inset-0 -z-10 bg-grain blur-3xl opacity-50" />
       <div className="noisy" />
