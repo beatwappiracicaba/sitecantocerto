@@ -40,10 +40,10 @@ export default function Header({ onOpenLogin }: HeaderProps) {
             Entrar
           </button>
           <nav className="hidden md:flex items-center gap-8">
-            <a href="#agenda" className="text-white/70 hover:text-neon-green transition-colors font-medium">Agenda</a>
+            <a href="#contato" className="text-white/70 hover:text-neon-green transition-colors font-medium">Contato</a>
             <a href="#galeria" className="text-white/70 hover:text-neon-pink transition-colors font-medium">Galeria</a>
-            <a href="#contato" className="shine inline-flex items-center rounded-full border border-white/10 bg-white/5 px-6 py-2 text-sm font-semibold hover:bg-white/10 hover:border-white/20 transition-all hover:scale-105">
-              Reservar Mesa
+            <a href="#agenda" className="shine inline-flex items-center rounded-full border border-white/10 bg-white/5 px-6 py-2 text-sm font-semibold hover:bg-white/10 hover:border-white/20 transition-all hover:scale-105">
+              Próximos Shows
             </a>
             <button
               onClick={onOpenLogin}
